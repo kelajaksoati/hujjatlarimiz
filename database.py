@@ -7,30 +7,35 @@ class Database:
         self.create_tables()
 
     def create_tables(self):
-        # Adminlar
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, role TEXT)")
-        # Fayllar ombori
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, role TEXT DEFAULT 'admin')")
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+        # Mundarija uchun yangi jadval
         self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS file_links (
+            CREATE TABLE IF NOT EXISTS catalog (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_name TEXT,
                 category TEXT,
-                grade TEXT,
                 link TEXT
             )
         """)
-        # Sozlamalar
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
         self.cursor.execute("INSERT OR IGNORE INTO settings VALUES ('quarter', '2-chorak')")
         self.conn.commit()
 
-    def add_file(self, name, cat, grade, link):
-        self.cursor.execute("INSERT INTO file_links (file_name, category, grade, link) VALUES (?, ?, ?, ?)", (name, cat, grade, link))
+    def add_to_catalog(self, name, cat, link):
+        self.cursor.execute("INSERT INTO catalog (file_name, category, link) VALUES (?, ?, ?)", (name, cat, link))
         self.conn.commit()
 
-    def get_files(self, category):
-        return self.cursor.execute("SELECT file_name, grade, link FROM file_links WHERE category = ?", (category,)).fetchall()
+    def get_catalog(self, cat):
+        return self.cursor.execute("SELECT file_name, link FROM catalog WHERE category = ?", (cat,)).fetchall()
 
-    def clear_database(self):
-        self.cursor.execute("DELETE FROM file_links")
+    def clear_all_data(self):
+        self.cursor.execute("DELETE FROM catalog")
         self.conn.commit()
+
+    def is_admin(self, user_id, super_admin):
+        if user_id == super_admin: return True
+        res = self.cursor.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        return res is not None
+
+    def get_quarter(self):
+        return self.cursor.execute("SELECT value FROM settings WHERE key = 'quarter'").fetchone()[0]
