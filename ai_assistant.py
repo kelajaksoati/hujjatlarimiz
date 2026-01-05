@@ -1,25 +1,19 @@
-from docx import Document
-from docx.shared import Pt
 import os
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-def add_watermark(file_path, watermark_text):
-    """Word fayliga avtomatik muhr va footer qo'shish"""
-    if file_path.endswith('.docx'):
-        doc = Document(file_path)
-        for section in doc.sections:
-            footer = section.footer
-            p = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
-            run = p.add_run(f"Manba: {watermark_text} | @ish_reja_uz")
-            run.font.size = Pt(9)
-        doc.save(file_path)
-        return True
-    return False
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel('gemini-pro')
 
-def rename_file(file_path, username):
-    """Fayl nomiga kanal userini qo'shish"""
-    directory = os.path.dirname(file_path)
-    old_name = os.path.basename(file_path)
-    new_name = f"@{username}_{old_name}"
-    new_path = os.path.join(directory, new_name)
-    os.rename(file_path, new_path)
-    return new_path, new_name
+async def generate_ai_ad(file_name, grade, quarter):
+    """Fayl uchun jozibali reklama va spoilerli matn yaratadi"""
+    prompt = f"Fayl: {file_name}, Sinf: {grade}, Chorak: {quarter}. Telegram kanal uchun HTML formatda reklama yoz."
+    response = model.generate_content(prompt)
+    return response.text
+
+async def ai_consultant(question):
+    """Adminlar bilan metodik suhbat va imtihon javoblari"""
+    prompt = f"Siz @ish_reja_uz botining metodik yordamchisisiz. Savol: {question}"
+    response = model.generate_content(prompt)
+    return response.text
