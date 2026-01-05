@@ -1,10 +1,3 @@
-Tayyor! Barcha funksiyalarni, jumladan, 3-chorak sozlamalari va admin fayl yuklaganda kanalga avtomatik reklama bilan yuborish mantiqini yagona main.py fayliga jamladim.
-
-Bu kod asinxron ma'lumotlar bazasi va Gemini AI bilan to'liq integratsiya qilingan.
-
-🚀 Yakuniy va To'liq main.py
-Python
-
 import asyncio, os, re
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
