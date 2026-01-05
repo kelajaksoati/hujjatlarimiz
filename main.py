@@ -14,6 +14,12 @@ from ai_assistant import generate_ai_ad, ai_consultant
 
 load_dotenv()
 
+# --- Kerakli papkalarni yaratish ---
+# Bu qism bot ishga tushganda downloads va templates papkalarini avtomatik yaratadi
+for folder in ["downloads", "templates"]:
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
 db = Database()
 bot = Bot(
     token=os.getenv("BOT_TOKEN"), 
@@ -48,7 +54,7 @@ def ai_service_menu():
         [KeyboardButton(text="📝 Imtihon javoblari"), KeyboardButton(text="🔙 Orqaga")]
     ], resize_keyboard=True)
 
-# --- Mundarija Generator (Siz xohlagan shablon bilan) ---
+# --- Mundarija Generator ---
 @dp.message(F.text.in_(["📚 Boshlang'ich (1-4)", "🎓 Yuqori (5-11)", "📝 BSB va CHSB"]))
 async def send_dynamic_catalog(message: Message):
     cat_map = {
@@ -60,7 +66,6 @@ async def send_dynamic_catalog(message: Message):
     files = db.get_catalog(category)
     quarter = db.get_quarter() or "2-CHORAK"
     
-    # Asosiy matn shabloni
     text = (
         f"<b>FANLARDAN {quarter} EMAKTAB.UZ TIZIMIGA YUKLASH UCHUN OʻZBEK MAKTABLARGA "
         f"2025-2026 OʻQUV YILI ISH REJALARI</b>\n\n"
@@ -68,12 +73,10 @@ async def send_dynamic_catalog(message: Message):
         f"Boshqalarga ham ulashishni unutmang.\n\n"
     )
 
-    # Agar bazada fayllar bo'lsa, ularni chiqaradi
     if files:
         for name, link in files:
             text += f"📚 {name} — <a href='{link}'>YUKLAB OLISH</a>\n"
     else:
-        # Fayllar yuklanmagan bo'lsa, standart fanlar ro'yxatini ko'rsatadi
         subjects = [
             "Alifbe 1-sinf", "Yozuv 1-sinf", "Oʻqish savodxonligi 1-4-sinf", "Adabiyot 5-11-sinf",
             "Biologiya 7-11-sinf", "Fizika 7-11-sinf", "Informatika 1-11-sinf", "Ingliz tili 1-11-sinf",
@@ -89,14 +92,13 @@ async def send_dynamic_catalog(message: Message):
         f"✅Kanalga obuna bo‘lish:👇👇👇\n"
         f"https://t.me/{CHANNEL_USERNAME}"
     )
-    
     await message.answer(text, disable_web_page_preview=True)
 
 # --- Shablon yaratish (Word) ---
 @dp.message(F.text == "📝 Shablon yaratish")
 async def start_tpl(message: Message, state: FSMContext):
     await message.answer("<b>Word shablon yaratish</b>\n\nIltimos, ma'lumotni kiriting:\n"
-                         "<code>Ism, Fan, Sinf</code> formatida.")
+                         "<code>Ism, Fan, Sinf</code> formatida yuboring.")
     await state.set_state(BotStates.waiting_for_template_data)
 
 @dp.message(BotStates.waiting_for_template_data)
@@ -108,8 +110,12 @@ async def create_tpl_file(message: Message, state: FSMContext):
             return
         
         file_path = create_lesson_template(parts[0].strip(), parts[1].strip(), parts[2].strip())
-        await message.answer_document(FSInputFile(file_path), caption="✅ Shablon tayyor!")
-        os.remove(file_path)
+        if file_path:
+            await message.answer_document(FSInputFile(file_path), caption="✅ Shablon tayyor!")
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        else:
+            await message.answer("❌ Fayl yaratishda xatolik yuz berdi.")
     except Exception as e:
         await message.answer(f"Xato: {e}")
     finally:
@@ -125,7 +131,7 @@ async def start_ai(message: Message, state: FSMContext):
 async def handle_ai(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await state.clear()
-        await message.answer("Suhbat tugadi.", reply_markup=main_menu())
+        await message.answer("Suhbat yakunlandi.", reply_markup=main_menu())
         return
     res = await ai_consultant(message.text)
     await message.answer(res)
@@ -148,10 +154,14 @@ async def cmd_start(message: Message):
 async def main():
     port = int(os.environ.get("PORT", 10000))
     try:
+        # Render uchun portni band qilish
         await asyncio.start_server(lambda r, w: None, '0.0.0.0', port)
     except: pass
     print("🚀 Bot ishga tushdi...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
