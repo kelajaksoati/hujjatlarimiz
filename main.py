@@ -103,14 +103,17 @@ async def cb_finalize_send(call: CallbackQuery, state: FSMContext):
     category = call.data.split("_")[1]
     data = await state.get_data()
     
+    # AI orqali reklama matni yaratish (ad_text ni to'g'ri olish)
     ad_text, _ = await generate_ai_ad(data['file_name'], category, "2", db.get_quarter())
     
+    # Kanalga yuborish
     msg = await bot.send_document(CHANNEL_ID, FSInputFile(data['file_path']), caption=ad_text)
     
+    # Linkni bazaga saqlash
     file_link = f"https://t.me/{CHANNEL_USERNAME}/{msg.message_id}"
     db.add_to_catalog(data['file_name'], category, file_link)
     
-    await call.message.edit_text(f"🚀 Fayl {category} bo'limiga yuborildi va mundarijaga qo'shildi!")
+    await call.message.edit_text(f"🚀 Fayl {category} bo'limiga yuborildi!")
     if os.path.exists(data['file_path']): os.remove(data['file_path'])
     await state.clear()
 
@@ -130,16 +133,7 @@ async def process_ai_chat(message: Message, state: FSMContext):
     res = await ai_consultant(message.text)
     await message.answer(res)
 
-# --- Navigatsiya va Boshqaruv ---
-@dp.message(F.text == "⚙️ Sozlamalar")
-async def settings_panel(message: Message):
-    if message.from_user.id != SUPER_ADMIN: return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🧹 Xotirani tozalash", callback_data="clean_storage")],
-        [InlineKeyboardButton(text="🧨 Bazani NOLGA tushirish", callback_data="clean_db")]
-    ])
-    await message.answer("Tizim sozlamalari:", reply_markup=kb)
-
+# --- Navigatsiya ---
 @dp.message(F.text == "📂 Fayllar Mundarijasi")
 async def show_cats(message: Message): await message.answer("Bo'limni tanlang:", reply_markup=catalog_menu())
 
@@ -153,18 +147,14 @@ async def go_back(message: Message): await message.answer("Asosiy menyu", reply_
 async def cmd_start(message: Message):
     await message.answer(f"Xush kelibsiz @{CHANNEL_USERNAME} admin paneli!", reply_markup=main_menu())
 
-# --- RENDER PORTINI ALDASH UCHUN ASOSIY FUNKSIYA ---
+# --- RENDER UCHUN ASOSIY FUNKSIYA ---
 async def main():
-    # Render uchun portni band qilish (Dummy Server)
+    # Render kutayotgan portni soxta server bilan band qilish
     port = int(os.environ.get("PORT", 10000))
-    server = await asyncio.start_server(lambda r, w: None, '0.0.0.0', port)
-    print(f"INFO: Render porti {port} band qilindi.")
+    await asyncio.start_server(lambda r, w: None, '0.0.0.0', port)
     
-    print("🚀 Bot ishga tushmoqda...")
+    print(f"INFO: Render porti {port} ishga tushdi.")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        print("Bot to'xtatildi!")
+    asyncio.run(main())
