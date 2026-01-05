@@ -7,7 +7,10 @@ load_dotenv()
 
 # Gemini API kalitini sozlash
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro')
+
+# Model nomini yangilaymiz: 'gemini-pro' o'rniga 'gemini-1.5-flash'
+# Bu 404 xatoligini to'g'irlaydi
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 async def generate_ai_ad(file_name, cat, grade, quarter):
     """
@@ -22,7 +25,7 @@ async def generate_ai_ad(file_name, cat, grade, quarter):
 
 async def ai_consultant(message_text):
     """
-    Metodik yordamchi bilan muloqot (main.py dagi nomga moslandi)
+    Metodik yordamchi bilan muloqot
     """
     try:
         prompt = f"Siz @ish_reja_uz metodik yordamchisisiz. Admin savoli: {message_text}"
