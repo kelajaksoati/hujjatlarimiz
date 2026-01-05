@@ -1,7 +1,7 @@
 aiogram
-openpyxl
-python-docx
 python-dotenv
+python-docx
+openpyxl
 apscheduler
 aiohttp
 google-generativeai
