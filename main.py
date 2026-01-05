@@ -48,10 +48,10 @@ def ai_service_menu():
         [KeyboardButton(text="🔙 Orqaga")]
     ], resize_keyboard=True)
 
-# --- Mundarija Generator (Siz xohlagan shablon bo'yicha) ---
+# --- Mundarija Generator ---
 @dp.message(F.text.contains("Boshlang'ich"))
 async def send_primary_catalog(message: Message):
-    files = db.get_catalog("Boshlang'ich") # database.py da get_catalog bo'lishi kerak
+    files = db.get_catalog("Boshlang'ich")
     quarter = db.get_quarter()
     
     text = f"<b>FANLARDAN {quarter.upper()} EMAKTAB.UZ TIZIMIGA YUKLASH UCHUN OʻZBEK MAKTABLARGA 2025-2026 OʻQUV YILI ISH REJALARI</b>\n\n"
@@ -103,13 +103,10 @@ async def cb_finalize_send(call: CallbackQuery, state: FSMContext):
     category = call.data.split("_")[1]
     data = await state.get_data()
     
-    # AI orqali reklama matni yaratish
-    ad_text = await generate_ai_ad(data['file_name'], category, "2", db.get_quarter())
+    ad_text, _ = await generate_ai_ad(data['file_name'], category, "2", db.get_quarter())
     
-    # Kanalga yuborish
     msg = await bot.send_document(CHANNEL_ID, FSInputFile(data['file_path']), caption=ad_text)
     
-    # Linkni bazaga saqlash (Mundarija uchun)
     file_link = f"https://t.me/{CHANNEL_USERNAME}/{msg.message_id}"
     db.add_to_catalog(data['file_name'], category, file_link)
     
@@ -133,22 +130,16 @@ async def process_ai_chat(message: Message, state: FSMContext):
     res = await ai_consultant(message.text)
     await message.answer(res)
 
-# --- Tizimni Tozalash ---
+# --- Navigatsiya va Boshqaruv ---
 @dp.message(F.text == "⚙️ Sozlamalar")
 async def settings_panel(message: Message):
     if message.from_user.id != SUPER_ADMIN: return
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🧹 Xotirani tozalash (Fayllar)", callback_data="clean_storage")],
+        [InlineKeyboardButton(text="🧹 Xotirani tozalash", callback_data="clean_storage")],
         [InlineKeyboardButton(text="🧨 Bazani NOLGA tushirish", callback_data="clean_db")]
     ])
     await message.answer("Tizim sozlamalari:", reply_markup=kb)
 
-@dp.callback_query(F.data == "clean_db")
-async def cb_clear_db(call: CallbackQuery):
-    db.clear_all_data() # database.py da bu funksiya hamma catalog ma'lumotlarini o'chiradi
-    await call.message.edit_text("✅ Barcha mundarija linklari o'chirildi!")
-
-# --- Navigatsiya ---
 @dp.message(F.text == "📂 Fayllar Mundarijasi")
 async def show_cats(message: Message): await message.answer("Bo'limni tanlang:", reply_markup=catalog_menu())
 
@@ -162,8 +153,18 @@ async def go_back(message: Message): await message.answer("Asosiy menyu", reply_
 async def cmd_start(message: Message):
     await message.answer(f"Xush kelibsiz @{CHANNEL_USERNAME} admin paneli!", reply_markup=main_menu())
 
+# --- RENDER PORTINI ALDASH UCHUN ASOSIY FUNKSIYA ---
 async def main():
+    # Render uchun portni band qilish (Dummy Server)
+    port = int(os.environ.get("PORT", 10000))
+    server = await asyncio.start_server(lambda r, w: None, '0.0.0.0', port)
+    print(f"INFO: Render porti {port} band qilindi.")
+    
+    print("🚀 Bot ishga tushmoqda...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot to'xtatildi!")
