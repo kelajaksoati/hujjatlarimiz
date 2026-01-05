@@ -1,5 +1,4 @@
 import os
-import re
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -10,24 +9,22 @@ load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
-# Model nomini yangilaymiz: 'gemini-1.5-flash' eng barqaror va tezkor variant
+# Model: gemini-1.5-flash
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 def clean_html_response(text):
     """
-    AI qaytargan matndan Markdown belgilarini (
-    va Telegram HTML formati uchun tozalaydi.
+    Telegram HTML xatolarini oldini olish uchun matnni tozalash.
     """
-    # 
-html ... ``` yoki ``` ...
-    text = re.sub(r'
-(?:html)?', '', text)
-    text = text.replace('`', '').strip()
+    if not text:
+        return ""
+    # Ortiqcha markdown belgilari va kod bloklarini olib tashlash
+    text = text.replace('`html', '').replace('```', '').replace('`', '').strip()
     return text
 
 async def generate_ai_ad(file_name, cat, grade, quarter):
     """
-    Fayl ma'lumotlari asosida jozibali reklama matni yaratish
+    Fayl ma'lumotlari asosida reklama matni yaratish
     """
     try:
         prompt = (
@@ -35,35 +32,32 @@ async def generate_ai_ad(file_name, cat, grade, quarter):
             f"Kategoriya: {cat}\n"
             f"Sinf: {grade}\n"
             f"Chorak: {quarter}\n\n"
-            f"Vazifa: @ish_reja_uz kanali uchun o'zbek tilida qisqa va jozibali reklama yoz. "
-            f"Telegram HTML formatidan (<b>, <i>, <a>) foydalan. "
-            f"Faqat reklama matnini qaytar, tushuntirish berma."
+            f"Vazifa: @ish_reja_uz kanali uchun o'zbek tilida qisqa HTML reklama yoz. "
+            f"Faqat <b>, <i> teglari bo'lsin. Tushuntirish berma."
         )
         
-        # AI dan javob olish
+        # Asinxron so'rov
         response = await model.generate_content_async(prompt)
         cleaned_text = clean_html_response(response.text)
         
         return cleaned_text, None
     except Exception as e:
-        print(f"DEBUG (generate_ai_ad xatosi): {e}")
-        return f"📝 <b>Fayl:</b> {file_name}\n✅ Tayyor, kanalga yuklash mumkin!", None
+        print(f"AI Ad Error: {e}")
+        return f"📝 <b>Fayl:</b> {file_name}\n✅ @ish_reja_uz kanali uchun.", None
 
 async def ai_consultant(message_text):
     """
-    Metodik yordamchi bilan suhbat rejimi
+    Metodik yordamchi bilan suhbat
     """
     try:
         prompt = (
-            f"Siz @ish_reja_uz kanalining aqlli metodik yordamchisisiz. "
-            f"O'qituvchilarga dars ishlanmalari va metodika bo'yicha yordam berasiz. "
+            f"Siz @ish_reja_uz metodik yordamchisisiz. "
             f"O'zbek tilida xushmuomala javob bering.\n\n"
             f"Savol: {message_text}"
         )
         
-        # AI dan javob olish
         response = await model.generate_content_async(prompt)
         return response.text
     except Exception as e:
-        print(f"DEBUG (ai_consultant xatosi): {e}")
-        return "Hozirda AI xizmati biroz band. Iltimos, keyinroq urinib ko'ring."
+        print(f"AI Consultant Error: {e}")
+        return "Hozirda AI bilan bog'lanishda muammo bor."
