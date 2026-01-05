@@ -1,3 +1,8 @@
+Barcha so'ralgan funksiyalarni, xususan, Mundarija (Fanlar ro'yxati) shabloni va Shablon yaratish bo'limlarini o'z ichiga olgan to'liq main.py kodi quyida keltirilgan.
+
+🛠 Yangilangan main.py
+Python
+
 import asyncio, os, re
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
@@ -9,7 +14,7 @@ from dotenv import load_dotenv
 
 # Modullaringiz
 from database import Database
-from processor import add_watermark, rename_file, create_lesson_template # Yangi funksiya qo'shildi
+from processor import add_watermark, rename_file, create_lesson_template
 from ai_assistant import generate_ai_ad, ai_consultant
 
 load_dotenv()
@@ -27,7 +32,7 @@ CHANNEL_USERNAME = (os.getenv("CHANNEL_USERNAME") or "ish_reja_uz").replace("@",
 
 class BotStates(StatesGroup):
     ai_chat = State()
-    waiting_for_template_data = State() # Shablon ma'lumotlari uchun holat
+    waiting_for_template_data = State()
 
 # --- Tugmalar ---
 def main_menu():
@@ -48,6 +53,48 @@ def ai_service_menu():
         [KeyboardButton(text="📝 Imtihon javoblari"), KeyboardButton(text="🔙 Orqaga")]
     ], resize_keyboard=True)
 
+# --- Mundarija Generator (Siz so'ragan fanlar ro'yxati bilan) ---
+@dp.message(F.text.in_(["📚 Boshlang'ich (1-4)", "🎓 Yuqori (5-11)", "📝 BSB va CHSB"]))
+async def send_catalog(message: Message):
+    category = "Boshlang'ich" if "Boshlang'ich" in message.text else "Yuqori"
+    if "BSB" in message.text: category = "BSB_CHSB"
+    
+    files = db.get_catalog(category)
+    quarter = db.get_quarter() or "2-CHORAK"
+    
+    # Asosiy matn shabloni
+    text = (
+        f"<b>FANLARDAN {quarter} EMAKTAB.UZ TIZIMIGA YUKLASH UCHUN OʻZBEK MAKTABLARGA "
+        f"2025-2026 OʻQUV YILI ISH REJALARI</b>\n\n"
+        f"✅Oʻzingizga kerakli boʻlgan reja ustiga bosing va yuklab oling. "
+        f"Boshqalarga ham ulashishni unutmang.\n\n"
+    )
+
+    # Agar bazada fayllar bo'lsa, ularni havolasi bilan chiqaramiz
+    if files:
+        for name, link in files:
+            text += f"📚 {name} — <a href='{link}'>YUKLAB OLISH</a>\n"
+    else:
+        # Fayl topilmasa, siz yuborgan standart fanlar ro'yxatini chiqaramiz
+        subjects = [
+            "Alifbe 1-sinf", "Yozuv 1-sinf", "Oʻqish savodxonligi 1-4-sinf",
+            "Adabiyot 5-11-sinf", "Biologiya 7-11-sinf", "Fizika 7-11-sinf",
+            "Informatika 1-11-sinf", "Ingliz tili 1-11-sinf", "Matematika 1-7-sinf",
+            "Ona tili 2-11-sinf", "Tarix 5-11-sinf", "Kelajak soati 1-11-sinf"
+        ]
+        for sub in subjects:
+            text += f"📚 {sub}\n"
+        text += "\n<i>Hozircha yuklash uchun linklar tayyorlanmoqda...</i>"
+
+    text += (
+        f"\n\n❗️OʻQITUVCHILARGA JOʻNATISHNI UNUTMANG❗️\n\n"
+        f"#taqvim_mavzu_reja\n"
+        f"✅Kanalga obuna bo‘lish:👇👇👇\n"
+        f"https://t.me/{CHANNEL_USERNAME}"
+    )
+    
+    await message.answer(text, disable_web_page_preview=True)
+
 # --- Shablon yaratish logikasi ---
 @dp.message(F.text == "📝 Shablon yaratish")
 async def ask_template_info(message: Message, state: FSMContext):
@@ -62,12 +109,10 @@ async def process_template_creation(message: Message, state: FSMContext):
     try:
         data = message.text.split(",")
         if len(data) < 3:
-            await message.answer("⚠️ Ma'lumotlar to'liq emas. Namuna: <i>Ism, Fan, Sinf</i>")
+            await message.answer("⚠️ Ma'mulotlar to'liq emas. Namuna: <i>Ism, Fan, Sinf</i>")
             return
 
         name, subject, grade = data[0].strip(), data[1].strip(), data[2].strip()
-        
-        # processor.py dagi funksiyani chaqirish
         file_path = create_lesson_template(name, subject, grade)
         
         if file_path and os.path.exists(file_path):
@@ -75,10 +120,9 @@ async def process_template_creation(message: Message, state: FSMContext):
                 FSInputFile(file_path), 
                 caption=f"✅ <b>{subject}</b> fanidan dars ishlanmasi shabloni tayyor!"
             )
-            os.remove(file_path) # Yuborgandan keyin serverdan o'chirish
+            os.remove(file_path)
         else:
             await message.answer("❌ Shablon yaratishda texnik xatolik yuz berdi.")
-            
     except Exception as e:
         await message.answer(f"❌ Xatolik: {e}")
     finally:
@@ -135,7 +179,7 @@ async def cb_choose_cat(call: CallbackQuery):
 async def cb_finalize_send(call: CallbackQuery, state: FSMContext):
     category = call.data.split("_")[1]
     data = await state.get_data()
-    ad_text = await ai_consultant(f"Fayl: {data['file_name']}, Bo'lim: {category} uchun reklama yoz.")
+    ad_text, _ = await generate_ai_ad(data['file_name'], category, "Barcha", "2-chorak")
     try:
         msg = await bot.send_document(CHANNEL_ID, FSInputFile(data['file_path']), caption=ad_text)
         file_link = f"https://t.me/{CHANNEL_USERNAME}/{msg.message_id}"
