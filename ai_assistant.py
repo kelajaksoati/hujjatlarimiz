@@ -6,14 +6,12 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-pro')
 
-async def generate_ai_ad(file_name, grade, quarter):
-    """Fayl uchun jozibali reklama va spoilerli matn yaratadi"""
-    prompt = f"Fayl: {file_name}, Sinf: {grade}, Chorak: {quarter}. Telegram kanal uchun HTML formatda reklama yoz."
+async def generate_ai_ad(file_name, cat, grade, quarter):
+    prompt = f"Fayl: {file_name}, Bo'lim: {cat}, Sinf: {grade}, Chorak: {quarter}. @ish_reja_uz kanali uchun jozibali HTML reklama yoz."
     response = model.generate_content(prompt)
-    return response.text
+    return response.text, None
 
-async def ai_consultant(question):
-    """Adminlar bilan metodik suhbat va imtihon javoblari"""
-    prompt = f"Siz @ish_reja_uz botining metodik yordamchisisiz. Savol: {question}"
+async def ai_chat_assistant(message_text):
+    prompt = f"Siz @ish_reja_uz metodik yordamchisisiz. Admin savoli: {message_text}"
     response = model.generate_content(prompt)
     return response.text
