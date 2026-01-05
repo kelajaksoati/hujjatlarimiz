@@ -47,4 +47,4 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("SELECT value FROM settings WHERE key = 'quarter'") as cursor:
                 row = await cursor.fetchone()
-                return row[0] if row else "2-CHORAK"
+                return row[0] if row else "3-CHORAK"
