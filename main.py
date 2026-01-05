@@ -63,8 +63,10 @@ async def send_dynamic_catalog(message: Message):
         "📝 BSB va CHSB": "BSB_CHSB"
     }
     category = cat_map.get(message.text)
-    files = db.get_catalog(category)
-    quarter = db.get_quarter() or "2-CHORAK"
+    
+    # Asinxron chaqiruvlar
+    files = await db.get_catalog(category)
+    quarter = await db.get_quarter() or "3-CHORAK"
     
     text = (
         f"<b>FANLARDAN {quarter} EMAKTAB.UZ TIZIMIGA YUKLASH UCHUN OʻZBEK MAKTABLARGA "
@@ -90,7 +92,7 @@ async def settings_panel(message: Message):
     if message.from_user.id != SUPER_ADMIN:
         return await message.answer("Ushbu bo'lim faqat adminlar uchun.")
     
-    current_q = db.get_quarter() or "Aniq emas"
+    current_q = await db.get_quarter() or "Aniq emas"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Chorakni o'zgartirish", callback_data="change_quarter")],
         [InlineKeyboardButton(text="Statistika", callback_data="show_stats")]
@@ -104,17 +106,16 @@ async def cb_change_q(call: CallbackQuery, state: FSMContext):
 
 @dp.message(BotStates.setting_quarter)
 async def process_new_quarter(message: Message, state: FSMContext):
-    db.set_quarter(message.text.upper()) # database.py da bu funksiya bo'lishi kerak
+    await db.set_quarter(message.text.upper()) 
     await message.answer(f"✅ Chorak muvaffaqiyatli o'zgartirildi: {message.text.upper()}", reply_markup=main_menu())
     await state.clear()
 
-# --- 3. Imtihon Javoblari (AI Yordami) ---
+# --- 3. Imtihon Javoblari ---
 @dp.message(F.text == "📝 Imtihon javoblari")
 async def exam_answers(message: Message):
     text = (
         "<b>📝 Imtihon javoblari va metodik yordam</b>\n\n"
-        "Sizga kerakli bo'lgan sinf va fan imtihon savollarini AI orqali yechishimiz mumkin. "
-        "Yoki tayyor bazadan qidirish uchun admin bilan bog'laning.\n\n"
+        "Sizga kerakli bo'lgan sinf va fan imtihon savollarini AI orqali yechishimiz mumkin.\n\n"
         "<i>AI dan foydalanish uchun 'AI bilan suhbat' bo'limiga o'ting.</i>"
     )
     await message.answer(text)
@@ -140,7 +141,7 @@ async def create_tpl_file(message: Message, state: FSMContext):
     finally:
         await state.clear()
 
-# --- Navigatsiya ---
+# --- Navigatsiya va AI ---
 @dp.message(F.text == "📂 Fayllar Mundarijasi")
 async def show_cats(message: Message): await message.answer("Bo'limni tanlang:", reply_markup=catalog_menu())
 
@@ -154,14 +155,38 @@ async def go_back(message: Message): await message.answer("Asosiy menyu", reply_
 async def cmd_start(message: Message):
     await message.answer(f"Xush kelibsiz @{CHANNEL_USERNAME} admin paneli!", reply_markup=main_menu())
 
-# --- Server qismi ---
+@dp.message(F.text == "💬 AI bilan suhbat")
+async def start_ai(message: Message, state: FSMContext):
+    await message.answer("Savolingizni yozing (Chiqish: /cancel):")
+    await state.set_state(BotStates.ai_chat)
+
+@dp.message(BotStates.ai_chat)
+async def handle_ai(message: Message, state: FSMContext):
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("Suhbat tugadi.", reply_markup=main_menu())
+        return
+    res = await ai_consultant(message.text)
+    await message.answer(res)
+
+# --- Server va Ishga tushirish ---
 async def main():
+    # 1. Baza jadvallarini yaratish (Asinxron)
+    await db.create_tables() 
+    
+    # 2. Render portini band qilish
     port = int(os.environ.get("PORT", 10000))
     try:
         await asyncio.start_server(lambda r, w: None, '0.0.0.0', port)
-    except: pass
+        print(f"✅ Render port {port} band qilindi.")
+    except:
+        pass
+        
     print("🚀 Bot ishga tushdi...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
