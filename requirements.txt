@@ -1,7 +1,7 @@
-aiogram==3.3.0
-python-dotenv
-google-generativeai
-python-docx
+aiogram
 openpyxl
-aiohttp
+python-docx
+python-dotenv
 apscheduler
+aiohttp
+google-generativeai
