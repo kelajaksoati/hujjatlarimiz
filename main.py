@@ -7,12 +7,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from dotenv import load_dotenv
 
-# Sizning modullaringiz
+# Modullaringiz
 from database import Database
-from processor import add_watermark, rename_file
+from processor import add_watermark, rename_file, create_lesson_template # Yangi funksiya qo'shildi
 from ai_assistant import generate_ai_ad, ai_consultant
 
-# .env yuklash (Docker'da Environment Variables ishlatilsa ham zarar qilmaydi)
 load_dotenv()
 
 db = Database()
@@ -22,15 +21,13 @@ bot = Bot(
 )
 dp = Dispatcher()
 
-# O'zgaruvchilar
-# Render'da kiritgan Environment Variable larni o'qiydi
 SUPER_ADMIN = int(os.getenv("ADMIN_ID", 0))
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 CHANNEL_USERNAME = (os.getenv("CHANNEL_USERNAME") or "ish_reja_uz").replace("@", "")
 
 class BotStates(StatesGroup):
     ai_chat = State()
-    choosing_category = State()
+    waiting_for_template_data = State() # Shablon ma'lumotlari uchun holat
 
 # --- Tugmalar ---
 def main_menu():
@@ -47,45 +44,70 @@ def catalog_menu():
 
 def ai_service_menu():
     return ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="💬 AI bilan suhbat"), KeyboardButton(text="📝 Imtihon javoblari")],
-        [KeyboardButton(text="🔙 Orqaga")]
+        [KeyboardButton(text="💬 AI bilan suhbat"), KeyboardButton(text="📝 Shablon yaratish")],
+        [KeyboardButton(text="📝 Imtihon javoblari"), KeyboardButton(text="🔙 Orqaga")]
     ], resize_keyboard=True)
 
-# --- Mundarija Generator ---
-@dp.message(F.text.contains("Boshlang'ich"))
-async def send_primary_catalog(message: Message):
-    files = db.get_catalog("Boshlang'ich")
-    quarter = db.get_quarter()
-    
-    text = f"<b>FANLARDAN {quarter.upper()} EMAKTAB.UZ TIZIMIGA YUKLASH UCHUN OʻZBEK MAKTABLARGA 2025-2026 OʻQUV YILI ISH REJALARI</b>\n\n"
-    text += "✅Oʻzingizga kerakli boʻlgan reja ustiga bosing va yuklab oling. Boshqalarga ham ulashishni unutmang.\n\n"
-    
-    if not files:
-        text += "<i>Hozircha fayllar yuklanmagan.</i>"
-    else:
-        for name, link in files:
-            text += f"📚 {name} — <a href='{link}'>YUKLAB OLISH</a>\n"
-    
-    text += f"\n❗️OʻQITUVCHILARGA JOʻNATISHNI UNUTMANG❗️\n\n#taqvim_mavzu_reja\n✅Kanal: @{CHANNEL_USERNAME}"
-    await message.answer(text, disable_web_page_preview=True)
+# --- Shablon yaratish logikasi ---
+@dp.message(F.text == "📝 Shablon yaratish")
+async def ask_template_info(message: Message, state: FSMContext):
+    await message.answer("<b>Yangi dars ishlanmasi shabloni yaratish</b>\n\n"
+                         "Iltimos, ma'lumotlarni quyidagi formatda yuboring:\n"
+                         "<code>Ism Familiya, Fan nomi, Sinf</code>\n\n"
+                         "<i>Masalan: Anvar Valiyev, Matematika, 5-sinf</i>")
+    await state.set_state(BotStates.waiting_for_template_data)
+
+@dp.message(BotStates.waiting_for_template_data)
+async def process_template_creation(message: Message, state: FSMContext):
+    try:
+        data = message.text.split(",")
+        if len(data) < 3:
+            await message.answer("⚠️ Ma'lumotlar to'liq emas. Namuna: <i>Ism, Fan, Sinf</i>")
+            return
+
+        name, subject, grade = data[0].strip(), data[1].strip(), data[2].strip()
+        
+        # processor.py dagi funksiyani chaqirish
+        file_path = create_lesson_template(name, subject, grade)
+        
+        if file_path and os.path.exists(file_path):
+            await message.answer_document(
+                FSInputFile(file_path), 
+                caption=f"✅ <b>{subject}</b> fanidan dars ishlanmasi shabloni tayyor!"
+            )
+            os.remove(file_path) # Yuborgandan keyin serverdan o'chirish
+        else:
+            await message.answer("❌ Shablon yaratishda texnik xatolik yuz berdi.")
+            
+    except Exception as e:
+        await message.answer(f"❌ Xatolik: {e}")
+    finally:
+        await state.clear()
+
+# --- AI Suhbat ---
+@dp.message(F.text == "💬 AI bilan suhbat")
+async def start_ai_chat(message: Message, state: FSMContext):
+    await message.answer("Siz AI metodik yordamchi bilan suhbat rejimidasiz. Savolingizni yozing (Chiqish uchun /cancel):")
+    await state.set_state(BotStates.ai_chat)
+
+@dp.message(BotStates.ai_chat)
+async def process_ai_chat(message: Message, state: FSMContext):
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("Suhbat yakunlandi.", reply_markup=main_menu())
+        return
+    res = await ai_consultant(message.text)
+    await message.answer(res)
 
 # --- Fayl Yuklash va Admin Amallari ---
 @dp.message(F.document)
 async def handle_doc(message: Message, state: FSMContext):
-    # Admin ekanligini tekshirish
-    if message.from_user.id != SUPER_ADMIN:
-        return
-
+    if message.from_user.id != SUPER_ADMIN: return
     file_name = message.document.file_name
     file_path = f"downloads/{file_name}"
-    
-    # downloads papkasi yo'qligini tekshirish
-    if not os.path.exists("downloads"):
-        os.makedirs("downloads")
-
+    if not os.path.exists("downloads"): os.makedirs("downloads")
     await bot.download(message.document, destination=file_path)
     await state.update_data(file_path=file_path, file_name=file_name)
-    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏷 User qo'shish (@)", callback_data="op_rename")],
         [InlineKeyboardButton(text="🛡 Muhr bosish", callback_data="op_watermark")],
@@ -113,11 +135,7 @@ async def cb_choose_cat(call: CallbackQuery):
 async def cb_finalize_send(call: CallbackQuery, state: FSMContext):
     category = call.data.split("_")[1]
     data = await state.get_data()
-    
-    # AI orqali reklama matni yaratish
     ad_text = await ai_consultant(f"Fayl: {data['file_name']}, Bo'lim: {category} uchun reklama yoz.")
-    
-    # Kanalga yuborish
     try:
         msg = await bot.send_document(CHANNEL_ID, FSInputFile(data['file_path']), caption=ad_text)
         file_link = f"https://t.me/{CHANNEL_USERNAME}/{msg.message_id}"
@@ -125,27 +143,8 @@ async def cb_finalize_send(call: CallbackQuery, state: FSMContext):
         await call.message.edit_text(f"🚀 Fayl {category} bo'limiga yuborildi!")
     except Exception as e:
         await call.message.answer(f"❌ Kanalga yuborishda xato: {e}")
-    
-    if os.path.exists(data['file_path']): 
-        os.remove(data['file_path'])
+    if os.path.exists(data['file_path']): os.remove(data['file_path'])
     await state.clear()
-
-# --- AI Suhbat ---
-@dp.message(F.text == "💬 AI bilan suhbat")
-async def start_ai_chat(message: Message, state: FSMContext):
-    await message.answer("Siz AI metodik yordamchi bilan suhbat rejimidasiz. Savolingizni yozing (Chiqish uchun /cancel):")
-    await state.set_state(BotStates.ai_chat)
-
-@dp.message(BotStates.ai_chat)
-async def process_ai_chat(message: Message, state: FSMContext):
-    if message.text == "/cancel":
-        await state.clear()
-        await message.answer("Suhbat yakunlandi.", reply_markup=main_menu())
-        return
-    
-    # AI dan javob olish
-    res = await ai_consultant(message.text)
-    await message.answer(res)
 
 # --- Navigatsiya ---
 @dp.message(F.text == "📂 Fayllar Mundarijasi")
@@ -164,25 +163,18 @@ async def go_back(message: Message):
 async def cmd_start(message: Message):
     await message.answer(f"Xush kelibsiz @{CHANNEL_USERNAME} admin paneli!", reply_markup=main_menu())
 
-# --- RENDER VA DOCKER UCHUN ASOSIY FUNKSIYA ---
 async def main():
-    # Render "No open ports detected" xatosini oldini olish uchun soxta server
-    # Docker ichida 0.0.0.0 manzili shart
     port = int(os.environ.get("PORT", 10000))
-    
     try:
-        # Render kutayotgan portni band qilamiz
         await asyncio.start_server(lambda r, w: None, '0.0.0.0', port)
-        print(f"✅ Render uchun {port}-port muvaffaqiyatli band qilindi.")
+        print(f"✅ Render uchun {port}-port band qilindi.")
     except Exception as e:
-        print(f"⚠️ Portni ochishda xatolik (mahalliyda normal): {e}")
-
+        print(f"⚠️ Port xatosi: {e}")
     print("🚀 Bot ishga tushmoqda...")
-    # Botni ishga tushirish
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        print("Bot to'xtatildi.")
+        pass
