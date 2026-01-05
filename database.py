@@ -1,41 +1,50 @@
-import sqlite3
+import aiosqlite
 
 class Database:
-    def __init__(self, db_name="bot_system.db"):
-        self.conn = sqlite3.connect(db_name, check_same_thread=False)
-        self.cursor = self.conn.cursor()
-        self.create_tables()
+    def __init__(self, db_path="bot_database.db"):
+        self.db_path = db_path
 
-    def create_tables(self):
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, role TEXT DEFAULT 'admin')")
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-        # Mundarija uchun yangi jadval
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS catalog (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_name TEXT,
-                category TEXT,
-                link TEXT
-            )
-        """)
-        self.cursor.execute("INSERT OR IGNORE INTO settings VALUES ('quarter', '2-chorak')")
-        self.conn.commit()
+    async def create_tables(self):
+        """Ma'lumotlar bazasi jadvallarini yaratish."""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Fayllar mundarijasi uchun jadval
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS catalog (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    category TEXT,
+                    link TEXT
+                )
+            """)
+            # Sozlamalar (chorak va h.k.) uchun jadval
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            # Standart chorakni o'rnatish
+            await db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('quarter', '2-CHORAK')")
+            await db.commit()
 
-    def add_to_catalog(self, name, cat, link):
-        self.cursor.execute("INSERT INTO catalog (file_name, category, link) VALUES (?, ?, ?)", (name, cat, link))
-        self.conn.commit()
+    async def add_to_catalog(self, name, category, link):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("INSERT INTO catalog (name, category, link) VALUES (?, ?, ?)", 
+                             (name, category, link))
+            await db.commit()
 
-    def get_catalog(self, cat):
-        return self.cursor.execute("SELECT file_name, link FROM catalog WHERE category = ?", (cat,)).fetchall()
+    async def get_catalog(self, category):
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT name, link FROM catalog WHERE category = ?", (category,)) as cursor:
+                return await cursor.fetchall()
 
-    def clear_all_data(self):
-        self.cursor.execute("DELETE FROM catalog")
-        self.conn.commit()
+    async def set_quarter(self, quarter_name):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("UPDATE settings SET value = ? WHERE key = 'quarter'", (quarter_name,))
+            await db.commit()
 
-    def is_admin(self, user_id, super_admin):
-        if user_id == super_admin: return True
-        res = self.cursor.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)).fetchone()
-        return res is not None
-
-    def get_quarter(self):
-        return self.cursor.execute("SELECT value FROM settings WHERE key = 'quarter'").fetchone()[0]
+    async def get_quarter(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT value FROM settings WHERE key = 'quarter'") as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else "2-CHORAK"
