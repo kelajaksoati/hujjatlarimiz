@@ -9,11 +9,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiohttp import web
 from dotenv import load_dotenv
 
-# O'zingizning fayllaringizdan importlar
 from database import Database
 from processor import smart_rename, edit_excel, add_pdf_watermark, edit_docx
 
-# Sozlamalar va Loglar
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,7 +58,7 @@ async def process_and_send(file_path, original_name):
         elif new_name.lower().endswith('.pdf'): add_pdf_watermark(new_path)
         elif new_name.lower().endswith('.docx'): edit_docx(new_path)
 
-        cat = "BSB_CHSB" if "bsb" in new_name.lower() or "chsb" in new_name.lower() else \
+        cat = "BSB_CHSB" if any(x in new_name.lower() for x in ["bsb", "chsb"]) else \
               ("Yuqori" if any(x in new_name.lower() for x in ["5-","6-","7-","8-","9-","10-","11-"]) else "Boshlang'ich")
 
         caption_tpl = await db.get_setting('post_caption') or "{name} | @{channel}"
@@ -80,7 +78,7 @@ async def process_and_send(file_path, original_name):
 # --- HANDLERLAR ---
 @dp.message(F.text == "/start")
 async def cmd_start(m: Message):
-    if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
+    if await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("🛡 <b>Admin Panel yuklandi.</b>", reply_markup=get_main_kb())
 
 @dp.message(F.text.startswith("/add_admin"))
@@ -94,7 +92,7 @@ async def add_admin_handler(m: Message):
     except:
         await m.answer("⚠️ Format: <code>/add_admin ID</code>")
 
-# --- SOZLAMALAR CALLBACKLARI ---
+# --- SOZLAMALAR ---
 @dp.callback_query(F.data == "set_tpl")
 async def set_template(call: CallbackQuery, state: FSMContext):
     await call.message.answer("📝 Yangi shablon matnini yuboring.\nNamuna: <code>{name} fayli @{channel} kanalidan</code>")
@@ -127,26 +125,25 @@ async def choose_quarter(call: CallbackQuery):
     ])
     await call.message.edit_text("📅 Chorakni tanlang:", reply_markup=kb)
 
-# --- CHORAK TANLASH HANDLERI ---
 @dp.callback_query(F.data.startswith("q_"))
 async def set_quarter_handler(call: CallbackQuery):
     q_value = call.data.split("_")[1]
     await db.set_setting('quarter', q_value)
-    await call.message.edit_text(f"✅ Chorak muvaffaqiyatli o'zgartirildi: <b>{q_value}-chorak</b>")
+    await call.message.edit_text(f"✅ Chorak o'zgartirildi: <b>{q_value}-chorak</b>")
     await call.answer()
 
 @dp.callback_query(F.data == "clear_cat")
 async def clear_catalog(call: CallbackQuery):
     await db.clear_all()
-    await call.message.answer("✅ Katalog muvaffaqiyatli tozalandi!")
+    await call.message.answer("✅ Katalog tozalandi!")
     await call.answer()
 
-# --- REJALAR, STATISTIKA VA KATEGORIYALAR ---
+# --- ADMIN PANEL BOSHQARUVI ---
 @dp.message(F.text == "📅 Rejalarni ko'rish")
 async def view_plans(m: Message):
-    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
+    if not await db.is_admin(m.from_user.id, OWNER_ID): return
     plans = scheduler.get_jobs()
-    if not plans: return await m.answer("📭 Hozircha rejalashtirilgan fayllar yo'q.")
+    if not plans: return await m.answer("📭 Rejalashtirilgan fayllar yo'q.")
     text = "⏳ <b>Kutilayotgan rejalar:</b>\n\n"
     for job in plans:
         text += f"📄 {job.args[1]}\n⏰ {job.next_run_time.strftime('%d.%m.%Y %H:%M')}\n\n"
@@ -154,13 +151,13 @@ async def view_plans(m: Message):
 
 @dp.message(F.text == "📈 Batafsil statistika")
 async def show_stats(m: Message):
-    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
+    if not await db.is_admin(m.from_user.id, OWNER_ID): return
     count = await db.get_stats() 
     await m.answer(f"📊 <b>Statistika</b>\n\n✅ Jami fayllar: <b>{count} ta</b>\n📡 Kanal: @{CH_NAME}")
 
 @dp.message(F.text == "⚙️ Sozlamalar")
 async def settings_menu(m: Message):
-    if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
+    if await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("⚙️ <b>Sozlamalar bo'limi:</b>", reply_markup=get_settings_kb())
 
 @dp.message(F.text == "💎 Adminlarni boshqarish")
@@ -174,9 +171,10 @@ async def manage_admins(m: Message):
         for adm in admins_list: text += f"👤 ID: <code>{adm[0]}</code>\n"
         await m.answer(text)
 
+# --- FAYLLAR BILAN ISHLASH ---
 @dp.message(F.document)
 async def handle_doc(m: Message, state: FSMContext):
-    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
+    if not await db.is_admin(m.from_user.id, OWNER_ID): return
     os.makedirs("downloads", exist_ok=True)
     path = f"downloads/{m.document.file_name}"
     await bot.download(m.document, destination=path)
@@ -210,7 +208,7 @@ async def schedule_step(m: Message, state: FSMContext):
 
 @dp.message(F.text == "📁 Kategoriyalar")
 async def show_cats(m: Message):
-    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
+    if not await db.is_admin(m.from_user.id, OWNER_ID): return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Boshlang'ich", callback_data="cat_Boshlang'ich")],
         [InlineKeyboardButton(text="Yuqori sinflar", callback_data="cat_Yuqori")],
@@ -223,7 +221,7 @@ async def create_catalog(c: CallbackQuery):
     cat = c.data.split("_", 1)[1]
     items = await db.get_catalog(cat)
     if not items: return await c.answer("Fayllar topilmadi", show_alert=True)
-    q = await db.get_setting('quarter') or "3"
+    q = await db.get_setting('quarter') or "1"
     header = await db.get_setting('catalog_header') or "{quarter}-CHORAK REJALARI"
     text = f"<b>{header.format(quarter=q)}</b>\n\n"
     for i, (name, link) in enumerate(items, 1): text += f"{i}. <a href='{link}'>{name}</a>\n"
@@ -240,6 +238,7 @@ async def main():
     app.router.add_get('/', handle_root)
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000))).start()
+    
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
