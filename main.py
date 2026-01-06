@@ -1,3 +1,12 @@
+Siz yuborgan birinchi kodda botning barcha funksiyalari (klaviaturalar, statistika, kategoriyalar) bor, lekin ikkinchi kodda Render uchun muhim bo'lgan Conflict (to'qnashuv) oldini olish va Web server qismi yaxshiroq sozlangan.
+
+Men har ikkala kodni birlashtirib, barcha funksiyalari ishlaydigan va Render-da xato bermaydigan eng mukammal variantni tayyorladim.
+
+🚀 To'liq va To'g'rilangan main.py
+Ushbu kodni GitHub'dagi main.py fayliga to'liqligicha joylang:
+
+Python
+
 import asyncio, os, zipfile, shutil, aiohttp, logging
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F, types
@@ -160,15 +169,23 @@ async def show_stats(m: Message):
         count = await db.get_stats()
         await m.answer(f"📊 <b>Statistika:</b>\n\n✅ Bazadagi fayllar: {count} ta\n📡 Kanal: @{CH_NAME}")
 
-# --- RENDER SERVER ---
+# --- WEB SERVER (RENDER KEEP-ALIVE) ---
+async def handle_root(request):
+    return web.Response(text="Bot is Live 🚀")
+
 async def main():
     await db.create_tables()
     scheduler.start()
+    
     app = web.Application()
-    app.router.add_get('/', lambda r: web.Response(text="Bot is Live"))
+    app.router.add_get('/', handle_root)
     runner = web.AppRunner(app)
     await runner.setup()
-    await web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000))).start()
+    port = int(os.environ.get("PORT", 10000))
+    await web.TCPSite(runner, '0.0.0.0', port).start()
+    
+    # Render conflict oldini olish
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
