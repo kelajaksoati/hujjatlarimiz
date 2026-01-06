@@ -24,8 +24,7 @@ def edit_excel(path):
             ws['A1'].font = Font(bold=True, color="FF0000", size=12)
         wb.save(path)
         wb.close()
-    except Exception as e:
-        print(f"Excel error: {e}")
+    except Exception as e: print(f"Excel error: {e}")
 
 def add_pdf_watermark(path):
     try:
@@ -36,26 +35,20 @@ def add_pdf_watermark(path):
         can.setFont("Helvetica-Bold", 45)
         can.setFillGray(0.5, 0.15)
         can.saveState()
-        can.translate(300, 450)
-        can.rotate(45)
+        can.translate(300, 450); can.rotate(45)
         can.drawCentredString(0, 0, "@ish_reja_uz")
-        can.restoreState()
-        can.save()
+        can.restoreState(); can.save()
         packet.seek(0)
         watermark = PdfReader(packet).pages[0]
         for page in reader.pages:
             page.merge_page(watermark)
             writer.add_page(page)
-        with open(path, "wb") as f:
-            writer.write(f)
-    except Exception as e:
-        print(f"PDF error: {e}")
+        with open(path, "wb") as f: writer.write(f)
+    except Exception as e: print(f"PDF error: {e}")
 
 def edit_docx(path):
     try:
         doc = Document(path)
-        p = doc.add_paragraph("@ish_reja_uz", style='Normal')
         doc.paragraphs[0].insert_paragraph_before("@ish_reja_uz kanali uchun maxsus")
         doc.save(path)
-    except Exception as e:
-        print(f"Docx error: {e}")
+    except Exception as e: print(f"Docx error: {e}")
