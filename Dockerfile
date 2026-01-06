@@ -1,30 +1,30 @@
-# 1. Pythonning eng barqaror va yengil versiyasini tanlaymiz
+# 1. Eng barqaror va yengil versiya
 FROM python:3.10-slim
 
-# 2. Muhit o'zgaruvchilarini sozlash (Python xatolarni darhol chiqarishi uchun)
+# 2. Python xatolarni va loglarni keshda ushlamasdan darhol chiqarishi uchun
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 3. Ishchi katalogni belgilash
+# 3. Ishchi papkani yaratish
 WORKDIR /app
 
-# 4. Tizim kutubxonalarini yangilash (Docker build vaqtida kerak bo'lishi mumkin)
+# 4. Tizim paketlarini o'rnatish (SQLite va Docx uchun kerak bo'lishi mumkin)
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 5. Avval requirements faylini nusxalaymiz (Keshdan unumli foydalanish uchun)
+# 5. Keshni optimallashtirish: Avval faqat requirements.txt ni ko'chiramiz
+# Bu orqali agar kod o'zgarsa-yu, kutubxonalar o'zgarmasa, Render ularni qayta yuklamaydi
 COPY requirements.txt .
 
-# 6. Kutubxonalarni o'rnatamiz
+# 6. Kutubxonalarni o'rnatish
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# 7. Loyihaning barcha fayllarini nusxalash
+# 7. Loyihaning qolgan barcha fayllarini ko'chirish
 COPY . .
 
-# 8. Render kutadigan portni tashqariga ochish
-# Eslatman: main.py ichida ham 0.0.0.0:10000 ishlatilgan bo'lishi shart
+# 8. Render kutadigan port (Ixtiyoriy, lekin yaxshi amaliyot)
 EXPOSE 10000
 
 # 9. Botni ishga tushirish
