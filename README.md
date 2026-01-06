@@ -1,11 +1,15 @@
-# 🤖 @ish_reja_uz Boshqaruv Boti
-Ushbu bot Telegram kanallarida metodik materiallarni boshqarish, AI orqali reklama qilish va mundarija yaratish uchun mo'ljallangan.
+# 🚀 ISH REJA ADMIN BOT (Professional Edition)
 
-### 🚀 O'rnatish
-1. pip install -r requirements.txt
-2. .env faylini to'ldiring.
-3. python main.py orqali ishga tushiring.
-# Ultra-Fast Ish Reja Bot
-- Anti-sleep (Self-ping) tizimi.
-- Har soatda avto-tozalash (RAM & Disk optimizatsiyasi).
-- ZIP fayllarni asinxron qayta ishlash.
+Ushbu bot o'qituvchilar uchun dars rejalarini avtomatlashtirilgan tarzda brendlash va kanalga joylash uchun mo'ljallangan.
+
+### ✨ Imkoniyatlari:
+- **Auto-Rename:** Fayl nomlarini avtomatik brendlash.
+- **Excel/PDF Branding:** Fayl ichiga kanal nomini kiritish.
+- **ZIP Processing:** Arxivlarni bittada ochib, hamma faylni kanalga yuborish.
+- **24/7 Online:** Render'da uxlab qolmaslik uchun Self-ping tizimi.
+- **Auto-Cleanup:** Server xotirasini har soatda tozalash.
+
+### 🛠 O'rnatish:
+1. `.env` fayliga `BOT_TOKEN`, `ADMIN_ID`, `CHANNEL_ID` kiriting.
+2. Render panelida `RENDER_EXTERNAL_URL`ni sozlang.
+3. `Dockerfile` orqali Web Service sifatida deploy qiling.
