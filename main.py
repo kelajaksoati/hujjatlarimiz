@@ -1,12 +1,3 @@
-Siz yuborgan birinchi kodda botning barcha funksiyalari (klaviaturalar, statistika, kategoriyalar) bor, lekin ikkinchi kodda Render uchun muhim bo'lgan Conflict (to'qnashuv) oldini olish va Web server qismi yaxshiroq sozlangan.
-
-Men har ikkala kodni birlashtirib, barcha funksiyalari ishlaydigan va Render-da xato bermaydigan eng mukammal variantni tayyorladim.
-
-🚀 To'liq va To'g'rilangan main.py
-Ushbu kodni GitHub'dagi main.py fayliga to'liqligicha joylang:
-
-Python
-
 import asyncio, os, zipfile, shutil, aiohttp, logging
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F, types
