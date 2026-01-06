@@ -1,20 +1,33 @@
-# Python kesh
+# --- Python kesh fayllari ---
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
-# Muhit o'zgaruvchilari
+# --- Muhit o'zgaruvchilari (Maxfiy ma'lumotlar) ---
+# Bu faylni GitHub'ga yuklamaslik bot xavfsizligi uchun JUDA MUHIM
 .env
 
-# Ma'lumotlar bazasi
+# --- Ma'lumotlar bazasi ---
+# SQLite bazasi va vaqtinchalik loglari
 *.db
 *.db-journal
+*.sqlite3
 
-# Vaqtincha papkalar
+# --- Vaqtincha ishchi papkalar ---
+# Bot yuklagan va qayta ishlagan fayllar
 downloads/
 templates/
 extract_*/
+zip_*/
 
-# Virtual muhit
+# --- Virtual muhit (Local environment) ---
 venv/
 env/
+ENV/
+.venv/
+.env/
+
+# --- Tizim fayllari ---
+.DS_Store
+Thumbs.db
