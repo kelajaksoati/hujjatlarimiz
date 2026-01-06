@@ -6,11 +6,17 @@ class Database:
 
     async def create_tables(self):
         async with aiosqlite.connect(self.db_path) as db:
+            # Fayllar katalogi
             await db.execute("CREATE TABLE IF NOT EXISTS catalog (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, category TEXT, link TEXT, msg_id INTEGER)")
+            # Tizim sozlamalari
             await db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+            # Adminlar ro'yxati
+            await db.execute("CREATE TABLE IF NOT EXISTS admins (user_id INTEGER PRIMARY KEY)")
+            
             defaults = [
                 ('quarter', '1-CHORAK'),
-                ('post_caption', "📚 {name}\n\n#namuna\n#taqvim_mavzu_reja\n📘EMAKTAB.UZ uchun\n✅Kanal: @{channel}"),
+                ('post_caption', "📚 {name}\n\n✅Kanal: @{channel}"),
+                ('footer_text', "\n\n📩 Murojaat: @admin_user"),
                 ('catalog_header', "FANLARDAN {quarter} ISH REJALARI")
             ]
             for key, val in defaults:
@@ -28,6 +34,23 @@ class Database:
             await db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
             await db.commit()
 
+    async def is_admin(self, user_id, owner_id):
+        if user_id == owner_id: return True
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT 1 FROM admins WHERE user_id = ?", (user_id,)) as cursor:
+                return await cursor.fetchone() is not None
+
+    async def add_admin(self, user_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
+            await db.commit()
+
+    async def get_stats(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT COUNT(*) FROM catalog") as cursor:
+                res = await cursor.fetchone()
+                return res[0]
+
     async def add_to_catalog(self, name, category, link, msg_id):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", (name, category, link, msg_id))
@@ -35,10 +58,10 @@ class Database:
 
     async def get_catalog(self, category):
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT id, name, link FROM catalog WHERE category = ?", (category,)) as cursor:
+            async with db.execute("SELECT name, link FROM catalog WHERE category = ?", (category,)) as cursor:
                 return await cursor.fetchall()
 
-    async def clear_database(self):
+    async def clear_catalog(self):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM catalog")
             await db.commit()
