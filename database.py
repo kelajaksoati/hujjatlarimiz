@@ -6,9 +6,9 @@ class Database:
 
     async def create_tables(self):
         async with aiosqlite.connect(self.db_path) as db:
-            # Fayllar katalogi
+            # Fayllar va mundarija
             await db.execute("CREATE TABLE IF NOT EXISTS catalog (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, category TEXT, link TEXT, msg_id INTEGER)")
-            # Tizim sozlamalari
+            # Tizim sozlamalari (Shablon, Footer, Chorak)
             await db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
             # Adminlar ro'yxati
             await db.execute("CREATE TABLE IF NOT EXISTS admins (user_id INTEGER PRIMARY KEY)")
