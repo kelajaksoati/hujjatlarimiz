@@ -32,7 +32,8 @@ CH_NAME = os.getenv("CHANNEL_USERNAME", "ish_reja_uz").replace("@", "")
 
 class AdminStates(StatesGroup):
     waiting_for_time = State()
-    waiting_for_caption = State()
+    waiting_for_tpl = State()     # Shablon uchun yangi holat
+    waiting_for_footer = State()  # Footer uchun yangi holat
 
 # --- KLAVIATURALAR ---
 def get_main_kb():
@@ -45,8 +46,7 @@ def get_main_kb():
 def get_settings_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 Shablon", callback_data="set_tpl"), InlineKeyboardButton(text="🖋 Footer", callback_data="set_footer")],
-        [InlineKeyboardButton(text="📅 Chorakni tanlash", callback_data="choose_q")],
-        [InlineKeyboardButton(text="🗑 Katalog tozalash", callback_data="clear_cat")]
+        [InlineKeyboardButton(text="📅 Chorak", callback_data="choose_q"), InlineKeyboardButton(text="🗑 Tozalash", callback_data="clear_cat")]
     ])
 
 # --- ASOSIY FUNKSIYALAR ---
@@ -56,12 +56,10 @@ async def process_and_send(file_path, original_name):
         new_path = os.path.join(os.path.dirname(file_path), new_name)
         os.rename(file_path, new_path)
         
-        # Fayl turiga qarab qayta ishlash
         if new_name.lower().endswith(('.xlsx', '.xls')): edit_excel(new_path)
         elif new_name.lower().endswith('.pdf'): add_pdf_watermark(new_path)
         elif new_name.lower().endswith('.docx'): edit_docx(new_path)
 
-        # Kategoriyani aniqlash
         cat = "BSB_CHSB" if "bsb" in new_name.lower() or "chsb" in new_name.lower() else \
               ("Yuqori" if any(x in new_name.lower() for x in ["5-","6-","7-","8-","9-","10-","11-"]) else "Boshlang'ich")
 
@@ -71,12 +69,11 @@ async def process_and_send(file_path, original_name):
         sent = await bot.send_document(
             CH_ID, 
             FSInputFile(new_path), 
-            caption=caption_tpl.format(name=new_name, channel=CH_NAME) + footer
+            caption=caption_tpl.format(name=new_name, channel=CH_NAME) + f"\n\n{footer}"
         )
         
         await db.add_to_catalog(new_name, cat, f"https://t.me/{CH_NAME}/{sent.message_id}", sent.message_id)
         if os.path.exists(new_path): os.remove(new_path)
-        logger.info(f"Fayl yuborildi: {new_name}")
     except Exception as e:
         logger.error(f"Fayl yuborishda xatolik: {e}")
 
@@ -86,31 +83,80 @@ async def cmd_start(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("🛡 <b>Admin Panel yuklandi.</b>", reply_markup=get_main_kb())
 
+# --- ADMIN QO'SHISH ---
+@dp.message(F.text.startswith("/add_admin"))
+async def add_admin_handler(m: Message):
+    if m.from_user.id != OWNER_ID:
+        return await m.answer("❌ Bu buyruq faqat asosiy ega uchun!")
+    try:
+        new_id = int(m.text.split()[1])
+        await db.add_admin(new_id)
+        await m.answer(f"✅ Yangi admin qo'shildi! ID: <code>{new_id}</code>")
+    except:
+        await m.answer("⚠️ Format: <code>/add_admin ID</code>")
+
+# --- SOZLAMALAR CALLBACKLARI ---
+@dp.callback_query(F.data == "set_tpl")
+async def set_template(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("📝 Yangi shablon matnini yuboring.\nNamuna: <code>{name} fayli @{channel} kanalidan</code>")
+    await state.set_state(AdminStates.waiting_for_tpl)
+    await call.answer()
+
+@dp.callback_query(F.data == "set_footer")
+async def set_footer_call(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("🖋 Post ostiga qo'shiladigan footer matnini yuboring:")
+    await state.set_state(AdminStates.waiting_for_footer)
+    await call.answer()
+
+@dp.message(AdminStates.waiting_for_tpl)
+async def save_tpl(m: Message, state: FSMContext):
+    await db.set_setting('post_caption', m.text)
+    await m.answer("✅ Shablon saqlandi!")
+    await state.clear()
+
+@dp.message(AdminStates.waiting_for_footer)
+async def save_footer(m: Message, state: FSMContext):
+    await db.set_setting('footer_text', m.text)
+    await m.answer("✅ Footer matni saqlandi!")
+    await state.clear()
+
+@dp.callback_query(F.data == "choose_q")
+async def choose_quarter(call: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="1-Chorak", callback_data="q_1"), InlineKeyboardButton(text="2-Chorak", callback_data="q_2")],
+        [InlineKeyboardButton(text="3-Chorak", callback_data="q_3"), InlineKeyboardButton(text="4-Chorak", callback_data="q_4")]
+    ])
+    await call.message.edit_text("📅 Chorakni tanlang:", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("q_"))
+async def set_quarter(call: CallbackQuery):
+    q_num = call.data.split("_")[1]
+    await db.set_setting('quarter', q_num)
+    await call.message.answer(f"✅ {q_num}-chorak tanlandi.")
+    await call.answer()
+
+@dp.callback_query(F.data == "clear_cat")
+async def clear_catalog(call: CallbackQuery):
+    await db.clear_all()
+    await call.message.answer("✅ Katalog muvaffaqiyatli tozalandi!")
+    await call.answer()
+
+# --- REJALAR, STATISTIKA VA KATEGORIYALAR ---
 @dp.message(F.text == "📅 Rejalarni ko'rish")
 async def view_plans(m: Message):
     if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
     plans = scheduler.get_jobs()
-    if not plans:
-        return await m.answer("📭 Hozircha rejalashtirilgan fayllar yo'q.")
-    
-    text = "⏳ <b>Kutilayotgan rejalaringiz:</b>\n\n"
+    if not plans: return await m.answer("📭 Hozircha rejalashtirilgan fayllar yo'q.")
+    text = "⏳ <b>Kutilayotgan rejalar:</b>\n\n"
     for job in plans:
-        time_str = job.next_run_time.strftime('%d.%m.%Y %H:%M')
-        f_name = job.args[1] if len(job.args) > 1 else "Noma'lum fayl"
-        text += f"📄 Fayl: {f_name}\n⏰ Vaqt: {time_str}\n\n"
+        text += f"📄 {job.args[1]}\n⏰ {job.next_run_time.strftime('%d.%m.%Y %H:%M')}\n\n"
     await m.answer(text)
 
 @dp.message(F.text == "📈 Batafsil statistika")
 async def show_stats(m: Message):
     if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
     count = await db.get_stats() 
-    text = (
-        "📊 <b>Bot Statistikasi</b>\n\n"
-        f"✅ Jami yuklangan fayllar: <b>{count} ta</b>\n"
-        f"📡 Kanal: @{CH_NAME}\n"
-        f"📅 Bugungi sana: {datetime.now().strftime('%d.%m.%Y')}"
-    )
-    await m.answer(text)
+    await m.answer(f"📊 <b>Statistika</b>\n\n✅ Jami fayllar: <b>{count} ta</b>\n📡 Kanal: @{CH_NAME}")
 
 @dp.message(F.text == "⚙️ Sozlamalar")
 async def settings_menu(m: Message):
@@ -119,8 +165,7 @@ async def settings_menu(m: Message):
 
 @dp.message(F.text == "💎 Adminlarni boshqarish")
 async def manage_admins(m: Message):
-    if m.from_user.id != OWNER_ID:
-        return await m.answer("❌ Bu bo'lim faqat Owner uchun!")
+    if m.from_user.id != OWNER_ID: return
     admins_list = await db.get_admins()
     if not admins_list:
         await m.answer("👥 Adminlar yo'q.\nAdmin qo'shish: <code>/add_admin ID</code>")
@@ -136,7 +181,7 @@ async def handle_doc(m: Message, state: FSMContext):
     path = f"downloads/{m.document.file_name}"
     await bot.download(m.document, destination=path)
     await state.update_data(f_path=path, f_name=m.document.file_name)
-    await m.answer("📅 Yuborish vaqti (DD.MM.YYYY HH:MM) yoki hozir uchun <b>0</b> yuboring:")
+    await m.answer("📅 Vaqt (DD.MM.YYYY HH:MM) yoki hozir uchun <b>0</b>:")
     await state.set_state(AdminStates.waiting_for_time)
 
 @dp.message(AdminStates.waiting_for_time)
@@ -151,18 +196,16 @@ async def schedule_step(m: Message, state: FSMContext):
                     if not f.startswith('.') and "__MACOSX" not in r: 
                         await process_and_send(os.path.join(r, f), f)
             shutil.rmtree(ex_dir)
-            if os.path.exists(data['f_path']): os.remove(data['f_path'])
         else:
             await process_and_send(data['f_path'], data['f_name'])
-        await m.answer("✅ Fayllar yuborildi.")
+        await m.answer("✅ Bajarildi.")
     else:
         try:
             run_time = datetime.strptime(m.text, "%d.%m.%Y %H:%M")
             scheduler.add_job(process_and_send, 'date', run_date=run_time, args=[data['f_path'], data['f_name']])
-            await m.answer(f"⏳ Fayl rejalashtirildi: {m.text}")
+            await m.answer(f"⏳ Rejalashtirildi: {m.text}")
         except:
             await m.answer("❌ Xato format. Namuna: 06.01.2025 23:00")
-            return
     await state.clear()
 
 @dp.message(F.text == "📁 Kategoriyalar")
@@ -180,38 +223,25 @@ async def create_catalog(c: CallbackQuery):
     cat = c.data.split("_", 1)[1]
     items = await db.get_catalog(cat)
     if not items: return await c.answer("Fayllar topilmadi", show_alert=True)
-    
     q = await db.get_setting('quarter') or "3"
     header = await db.get_setting('catalog_header') or "{quarter}-CHORAK REJALARI"
     text = f"<b>{header.format(quarter=q)}</b>\n\n"
-    for i, (name, link) in enumerate(items, 1):
-        text += f"{i}. <a href='{link}'>{name}</a>\n"
-    
+    for i, (name, link) in enumerate(items, 1): text += f"{i}. <a href='{link}'>{name}</a>\n"
     await bot.send_message(CH_ID, text, disable_web_page_preview=True)
-    await c.answer("Mundarija kanalga yuborildi!")
+    await c.answer("Kanalga yuborildi!")
 
-# --- WEB SERVER (RENDER KEEP-ALIVE) ---
-async def handle_root(request): return web.Response(text="Bot is Live 🚀")
+# --- WEB SERVER & MAIN ---
+async def handle_root(request): return web.Response(text="Bot Live 🚀")
 
 async def main():
     await db.create_tables()
     scheduler.start()
-    
     app = web.Application()
     app.router.add_get('/', handle_root)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    await web.TCPSite(runner, '0.0.0.0', port).start()
-    
-    # MUHIM: CONFLICT OLDINI OLISH
+    runner = web.AppRunner(app); await runner.setup()
+    await web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000))).start()
     await bot.delete_webhook(drop_pending_updates=True)
-    
-    logger.info("Bot polling boshlamoqda...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot to'xtatildi")
+    asyncio.run(main())
