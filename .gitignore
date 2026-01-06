@@ -1,6 +1,5 @@
-venv/
-__pycache__/
-.env
-bot_database.db
+*.db
 downloads/
 templates/
+.env
+__pycache__/
