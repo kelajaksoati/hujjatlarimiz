@@ -85,6 +85,7 @@ async def cmd_start(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("🛡 <b>Admin Panel yuklandi.</b>", reply_markup=get_main_kb())
 
+# --- 📅 REJALARNI KO'RISH TUGMASI ---
 @dp.message(F.text == "📅 Rejalarni ko'rish")
 async def view_plans(m: Message):
     if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
@@ -96,14 +97,15 @@ async def view_plans(m: Message):
     text = "⏳ <b>Kutilayotgan rejalaringiz:</b>\n\n"
     for job in plans:
         time_str = job.next_run_time.strftime('%d.%m.%Y %H:%M')
-        text += f"📄 Job ID: <code>{job.id}</code>\n⏰ Vaqti: {time_str}\n\n"
+        # job.args orqali fayl nomini olamiz (agar args[1] da f_name bo'lsa)
+        f_name = job.args[1] if len(job.args) > 1 else "Noma'lum fayl"
+        text += f"📄 Fayl: {f_name}\n⏰ Vaqt: {time_str}\n\n"
     await m.answer(text)
 
+# --- 📈 STATISTIKA TUGMASI ---
 @dp.message(F.text == "📈 Batafsil statistika")
 async def show_stats(m: Message):
-    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): 
-        return
-        
+    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
     count = await db.get_stats() 
     text = (
         "📊 <b>Bot Statistikasi</b>\n\n"
@@ -113,12 +115,14 @@ async def show_stats(m: Message):
     )
     await m.answer(text)
 
+# --- ⚙️ SOZLAMALAR TUGMASI ---
 @dp.message(F.text == "⚙️ Sozlamalar")
 async def settings_menu(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
-        await m.answer("⚙️ <b>Bot sozlamalari:</b>\n\nBu yerdan post shabloni va footer matnini o'zgartirishingiz mumkin.", 
+        await m.answer("⚙️ <b>Sozlamalar bo'limi:</b>\n\nBu yerdan post shabloni va footer matnini o'zgartirishingiz mumkin.", 
                        reply_markup=get_settings_kb())
 
+# --- 💎 ADMINLARNI BOSHQARISH TUGMASI ---
 @dp.message(F.text == "💎 Adminlarni boshqarish")
 async def manage_admins(m: Message):
     if m.from_user.id != OWNER_ID:
@@ -137,11 +141,9 @@ async def manage_admins(m: Message):
 @dp.message(F.document)
 async def handle_doc(m: Message, state: FSMContext):
     if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
-    
     os.makedirs("downloads", exist_ok=True)
     path = f"downloads/{m.document.file_name}"
     await bot.download(m.document, destination=path)
-    
     await state.update_data(f_path=path, f_name=m.document.file_name)
     await m.answer("📅 Fayl qachon yuborilsin? (Format: <code>DD.MM.YYYY HH:MM</code>)\nHozir yuborish uchun <b>0</b> yuboring.")
     await state.set_state(AdminStates.waiting_for_time)
