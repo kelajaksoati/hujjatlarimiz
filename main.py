@@ -32,8 +32,8 @@ CH_NAME = os.getenv("CHANNEL_USERNAME", "ish_reja_uz").replace("@", "")
 
 class AdminStates(StatesGroup):
     waiting_for_time = State()
-    waiting_for_tpl = State()     # Shablon uchun yangi holat
-    waiting_for_footer = State()  # Footer uchun yangi holat
+    waiting_for_tpl = State()
+    waiting_for_footer = State()
 
 # --- KLAVIATURALAR ---
 def get_main_kb():
@@ -83,7 +83,6 @@ async def cmd_start(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("🛡 <b>Admin Panel yuklandi.</b>", reply_markup=get_main_kb())
 
-# --- ADMIN QO'SHISH ---
 @dp.message(F.text.startswith("/add_admin"))
 async def add_admin_handler(m: Message):
     if m.from_user.id != OWNER_ID:
@@ -128,11 +127,12 @@ async def choose_quarter(call: CallbackQuery):
     ])
     await call.message.edit_text("📅 Chorakni tanlang:", reply_markup=kb)
 
+# --- CHORAK TANLASH HANDLERI ---
 @dp.callback_query(F.data.startswith("q_"))
-async def set_quarter(call: CallbackQuery):
-    q_num = call.data.split("_")[1]
-    await db.set_setting('quarter', q_num)
-    await call.message.answer(f"✅ {q_num}-chorak tanlandi.")
+async def set_quarter_handler(call: CallbackQuery):
+    q_value = call.data.split("_")[1]
+    await db.set_setting('quarter', q_value)
+    await call.message.edit_text(f"✅ Chorak muvaffaqiyatli o'zgartirildi: <b>{q_value}-chorak</b>")
     await call.answer()
 
 @dp.callback_query(F.data == "clear_cat")
