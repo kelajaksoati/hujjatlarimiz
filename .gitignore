@@ -1,5 +1,20 @@
+# Python kesh
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Muhit o'zgaruvchilari
+.env
+
+# Ma'lumotlar bazasi
 *.db
+*.db-journal
+
+# Vaqtincha papkalar
 downloads/
 templates/
-.env
-__pycache__/
+extract_*/
+
+# Virtual muhit
+venv/
+env/
