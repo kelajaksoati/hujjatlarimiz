@@ -38,10 +38,9 @@ class Database:
                 res = await cursor.fetchone()
                 return res is not None
 
-    async def add_to_catalog(self, name, category, link, msg_id):
+    async def add_admin(self, user_id):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", 
-                           (name, category, link, msg_id))
+            await db.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
             await db.commit()
 
     async def get_stats(self):
@@ -49,3 +48,14 @@ class Database:
             async with db.execute("SELECT COUNT(*) FROM catalog") as cursor:
                 res = await cursor.fetchone()
                 return res[0] if res else 0
+
+    async def add_to_catalog(self, name, category, link, msg_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", 
+                           (name, category, link, msg_id))
+            await db.commit()
+
+    async def get_catalog(self, category):
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT name, link FROM catalog WHERE category = ?", (category,)) as cursor:
+                return await cursor.fetchall()
