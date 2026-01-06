@@ -6,15 +6,12 @@ class Database:
 
     async def create_tables(self):
         async with aiosqlite.connect(self.db_path) as db:
-            # Fayllar va sozlamalar bazasi
             await db.execute("CREATE TABLE IF NOT EXISTS catalog (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, category TEXT, link TEXT, msg_id INTEGER)")
             await db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-            
-            # Standart shablonlar
             defaults = [
                 ('quarter', '1-CHORAK'),
                 ('post_caption', "📚 {name}\n\n#namuna\n#taqvim_mavzu_reja\n📘EMAKTAB.UZ uchun\n✅Kanal: @{channel}"),
-                ('catalog_header', "FANLARDAN {quarter} ISH REJALARI\n\n✅Tanlang:")
+                ('catalog_header', "FANLARDAN {quarter} ISH REJALARI")
             ]
             for key, val in defaults:
                 await db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, val))
@@ -25,6 +22,11 @@ class Database:
             async with db.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cursor:
                 row = await cursor.fetchone()
                 return row[0] if row else ""
+
+    async def update_setting(self, key, value):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+            await db.commit()
 
     async def add_to_catalog(self, name, category, link, msg_id):
         async with aiosqlite.connect(self.db_path) as db:
