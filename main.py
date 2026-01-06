@@ -1,58 +1,97 @@
 import asyncio, os, zipfile, shutil, aiohttp, logging
-from datetime import datetime
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 from aiohttp import web
 from dotenv import load_dotenv
 
 from database import Database
 from processor import smart_rename, edit_excel, add_pdf_watermark
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Sozlamalar
 load_dotenv()
-
+logging.basicConfig(level=logging.INFO)
 db = Database()
-bot = Bot(token=os.getenv("BOT_TOKEN"), default=DefaultBotProperties(parse_mode="HTML"))
-dp = Dispatcher(storage=MemoryStorage())
-
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+bot = Bot(token=os.getenv("BOT_TOKEN"), default=types.DefaultBotProperties(parse_mode="HTML"))
+dp = Dispatcher()
+OWNER_ID = int(os.getenv("ADMIN_ID", 0))
 CH_ID = os.getenv("CHANNEL_ID")
 CH_NAME = os.getenv("CHANNEL_USERNAME", "ish_reja_uz").replace("@", "")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
 
-for folder in ["downloads", "templates"]: os.makedirs(folder, exist_ok=True)
+class AdminStates(StatesGroup):
+    waiting_for_caption = State()
+    waiting_for_footer = State()
+    waiting_for_new_admin = State()
 
 # --- KLAVIATURALAR ---
-def admin_kb():
+def get_main_kb():
     return ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="📂 Fayllar Mundarijasi")],
-        [KeyboardButton(text="⚙️ Sozlamalar"), KeyboardButton(text="🗑 Bazani tozalash")]
+        [KeyboardButton(text="📅 Rejalarni ko'ish"), KeyboardButton(text="📈 Batafsil statistika")],
+        [KeyboardButton(text="📁 Kategoriyalar"), KeyboardButton(text="⚙️ Sozlamalar")],
+        [KeyboardButton(text="💎 Adminlarni boshqarish")]
     ], resize_keyboard=True)
 
-def settings_kb():
+def get_settings_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="1-CHORAK", callback_data="set_q_1"), InlineKeyboardButton(text="2-CHORAK", callback_data="set_q_2")],
-        [InlineKeyboardButton(text="3-CHORAK", callback_data="set_q_3"), InlineKeyboardButton(text="4-CHORAK", callback_data="set_q_4")]
+        [InlineKeyboardButton(text="📝 Shablon", callback_data="edit_tpl"), InlineKeyboardButton(text="🖋 Footer", callback_data="edit_footer")],
+        [InlineKeyboardButton(text="📅 Chorakni tanlash", callback_data="choose_q")],
+        [InlineKeyboardButton(text="🗑 Tozalash", callback_data="clear_all"), InlineKeyboardButton(text="⚡ Tezkor", callback_data="quick_settings")]
     ])
 
-# --- FUNKSIYALAR ---
-async def keep_alive():
-    if not RENDER_URL: return
-    async with aiohttp.ClientSession() as session:
-        while True:
-            try:
-                async with session.get(RENDER_URL) as resp: logger.info(f"📡 Ping: {resp.status}")
-            except: pass
-            await asyncio.sleep(600)
+# --- ADMIN TEKSHIRUV ---
+async def check_admin(m: Message):
+    if not await db.is_admin(m.from_user.id, OWNER_ID):
+        await m.answer("Siz admin emassiz!")
+        return False
+    return True
 
-async def process_file_logic(local_path, original_name):
+# --- HANDLERLAR ---
+@dp.message(F.text == "/start")
+async def cmd_start(m: Message):
+    if await check_admin(m):
+        await m.answer("🛡 <b>Professional Admin Panel</b> yuklandi.", reply_markup=get_main_kb())
+
+@dp.message(F.text == "⚙️ Sozlamalar")
+async def settings_menu(m: Message):
+    if await check_admin(m):
+        q = await db.get_setting('quarter')
+        await m.answer(f"⚙️ <b>Tizim sozlamalari</b>\n\nHozirgi holat: <code>{q}</code>", reply_markup=get_settings_kb())
+
+@dp.callback_query(F.data == "choose_q")
+async def choose_q(c: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"{i}-chorak", callback_data=f"set_q_{i}") for i in range(1, 3)],
+        [InlineKeyboardButton(text=f"{i}-chorak", callback_data=f"set_q_{i}") for i in range(3, 5)]
+    ])
+    await c.message.edit_text("Yangi chorakni tanlang:", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("set_q_"))
+async def set_q(c: CallbackQuery):
+    q = f"{c.data.split('_')[2]}-chorak"
+    await db.update_setting('quarter', q.upper())
+    await c.answer(f"✅ {q} tanlandi")
+    await settings_menu(c.message)
+
+@dp.message(F.text == "📈 Batafsil statistika")
+async def show_stats(m: Message):
+    if await check_admin(m):
+        count = await db.get_stats()
+        await m.answer(f"📊 <b>Bot statistikasi:</b>\n\n✅ Bazadagi fayllar: {count} ta\n📡 Kanal: @{CH_NAME}")
+
+@dp.message(F.text == "💎 Adminlarni boshqarish")
+async def manage_admins(m: Message):
+    if m.from_user.id != OWNER_ID: return
+    await m.answer("Yangi admin ID raqamini yuboring (Faqat asosiy admin uchun):")
+    # Bu yerda FSM orqali ID qabul qilish mumkin
+
+# --- FAYL BILAN ISHLASH (PRO) ---
+async def process_file(local_path, filename):
     try:
-        new_name = smart_rename(original_name)
+        new_name = smart_rename(filename)
         new_path = os.path.join(os.path.dirname(local_path), new_name)
         os.rename(local_path, new_path)
+        
         if new_name.lower().endswith(('.xlsx', '.xls')): edit_excel(new_path)
         elif new_name.lower().endswith('.pdf'): add_pdf_watermark(new_path)
 
@@ -60,76 +99,47 @@ async def process_file_logic(local_path, original_name):
         if any(x in new_name.lower() for x in ["bsb", "chsb"]): cat = "BSB_CHSB"
         elif any(x in new_name.lower() for x in ["5-", "6-", "7-", "8-", "9-", "10-", "11-"]): cat = "Yuqori"
 
-        caption_tpl = await db.get_setting('post_caption')
-        sent_msg = await bot.send_document(CH_ID, FSInputFile(new_path), caption=caption_tpl.format(name=new_name, channel=CH_NAME))
-        await db.add_to_catalog(new_name, cat, f"https://t.me/{CH_NAME}/{sent_msg.message_id}", sent_msg.message_id)
+        caption = await db.get_setting('post_caption')
+        footer = await db.get_setting('footer_text')
+        
+        sent = await bot.send_document(CH_ID, FSInputFile(new_path), caption=caption.format(name=new_name, channel=CH_NAME) + footer)
+        await db.add_to_catalog(new_name, cat, f"https://t.me/{CH_NAME}/{sent.message_id}", sent.message_id)
         return True
-    except: return False
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        return False
 
-# --- HANDLERLAR ---
-@dp.message(F.text == "/start")
-async def cmd_start(message: Message):
-    await message.answer("Boshqaruv paneli:", reply_markup=admin_kb())
-
-@dp.message(F.text == "⚙️ Sozlamalar")
-async def show_settings(message: Message):
-    curr_q = await db.get_setting('quarter')
-    await message.answer(f"Hozirgi chorak: <b>{curr_q}</b>\n\nO'zgartirish uchun tanlang:", reply_markup=settings_kb())
-
-@dp.callback_query(F.data.startswith("set_q_"))
-async def update_q(call: CallbackQuery):
-    q_num = call.data.split("_")[2]
-    await db.update_setting('quarter', f"{q_num}-CHORAK")
-    await call.message.edit_text(f"✅ Chorak {q_num}-CHORAK ga o'zgartirildi!")
-    await call.answer()
-
-@dp.message(F.text == "📂 Fayllar Mundarijasi")
-async def show_catalog(message: Message):
-    q = await db.get_setting('quarter')
-    header = await db.get_setting('catalog_header')
-    found = False
-    for c in ["Boshlang'ich", "Yuqori", "BSB_CHSB"]:
-        items = await db.get_catalog(c)
-        if not items: continue
-        found = True
-        text = f"<b>{header.format(quarter=q)}</b>\n\n<u>{c} bo'limi:</u>\n\n"
-        for idx, name, link in items: text += f"📚 <a href='{link}'>{name}</a>\n"
-        await message.answer(text, disable_web_page_preview=True)
-    if not found: await message.answer("Bazada fayllar yo'q. Avval fayl yuklang!")
-
-@dp.message(F.document & (F.from_user.id == ADMIN_ID))
-async def handle_docs(message: Message):
-    msg = await message.answer("⏳ Ishlanmoqda...")
-    path = f"downloads/{message.document.file_name}"
-    await bot.download(message.document, destination=path)
+@dp.message(F.document)
+async def handle_docs(m: Message):
+    if not await check_admin(m): return
+    status = await m.answer("⏳ Ishlov berilmoqda...")
+    path = f"downloads/{m.document.file_name}"
+    await bot.download(m.document, destination=path)
+    
     if path.endswith(".zip"):
-        ex = f"downloads/zip_{message.message_id}"
+        ex = f"downloads/zip_{m.message_id}"
         os.makedirs(ex, exist_ok=True)
         with zipfile.ZipFile(path, 'r') as z: z.extractall(ex)
         for r, d, fs in os.walk(ex):
             for f in fs:
-                if f.startswith('.') or "__MACOSX" in r: continue
-                await process_file_logic(os.path.join(r, f), f)
+                if not f.startswith('.') and "__MACOSX" not in r:
+                    await process_file(os.path.join(r, f), f)
         shutil.rmtree(ex)
-        await msg.edit_text("✅ ZIP arxivdagi barcha fayllar joylandi!")
+        await status.edit_text("✅ ZIP barcha fayllari kanalda!")
     else:
-        await process_file_logic(path, message.document.file_name)
-        await msg.edit_text("✅ Fayl tayyor!")
+        await process_file(path, m.document.file_name)
+        await status.edit_text("✅ Fayl tayyor!")
     if os.path.exists(path): os.remove(path)
 
-@dp.message(F.text == "🗑 Bazani tozalash")
-async def clear_db(message: Message):
-    await db.clear_database()
-    await message.answer("✅ Barcha ma'lumotlar o'chirildi.")
-
+# --- RENDER WEB SERVER ---
 async def main():
     await db.create_tables()
-    asyncio.create_task(keep_alive())
     app = web.Application()
-    app.router.add_get('/', lambda r: web.Response(text="Live"))
+    app.router.add_get('/', lambda r: web.Response(text="Bot is Live"))
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000))).start()
     await dp.start_polling(bot)
 
-if __name__ == "__main__": asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
