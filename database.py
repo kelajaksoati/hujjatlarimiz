@@ -6,11 +6,8 @@ class Database:
 
     async def create_tables(self):
         async with aiosqlite.connect(self.db_path) as db:
-            # Fayllar va mundarija
             await db.execute("CREATE TABLE IF NOT EXISTS catalog (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, category TEXT, link TEXT, msg_id INTEGER)")
-            # Tizim sozlamalari (Shablon, Footer, Chorak)
             await db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-            # Adminlar ro'yxati
             await db.execute("CREATE TABLE IF NOT EXISTS admins (user_id INTEGER PRIMARY KEY)")
             
             defaults = [
@@ -38,30 +35,17 @@ class Database:
         if user_id == owner_id: return True
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("SELECT 1 FROM admins WHERE user_id = ?", (user_id,)) as cursor:
-                return await cursor.fetchone() is not None
+                res = await cursor.fetchone()
+                return res is not None
 
-    async def add_admin(self, user_id):
+    async def add_to_catalog(self, name, category, link, msg_id):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
+            await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", 
+                           (name, category, link, msg_id))
             await db.commit()
 
     async def get_stats(self):
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("SELECT COUNT(*) FROM catalog") as cursor:
                 res = await cursor.fetchone()
-                return res[0]
-
-    async def add_to_catalog(self, name, category, link, msg_id):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", (name, category, link, msg_id))
-            await db.commit()
-
-    async def get_catalog(self, category):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT name, link FROM catalog WHERE category = ?", (category,)) as cursor:
-                return await cursor.fetchall()
-
-    async def clear_catalog(self):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM catalog")
-            await db.commit()
+                return res[0] if res else 0
