@@ -1,10 +1,3 @@
-Siz bergan ikkala kodni birlashtirib, barcha funksiyalarni (Admin boshqaruvi, Sozlamalar, ZIP bilan ishlash va Aniq vaqtga rejalashtirish) o'z ichiga olgan eng mukammal va professional main.py kodini tayyorladim.
-
-Bu kodda xatoliklar tuzatildi, mantiqiy ketma-ketlik va xavfsizlik choralari kuchaytirildi.
-
-main.py (Yakuniy va Professional variant)
-Python
-
 import asyncio, os, zipfile, shutil, aiohttp, logging
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F, types
