@@ -9,11 +9,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiohttp import web
 from dotenv import load_dotenv
 
-# O'zingizning fayllaringizdan import
+# O'zingizning fayllaringizdan importlar
 from database import Database
 from processor import smart_rename, edit_excel, add_pdf_watermark, edit_docx
 
-# Sozlamalar
+# Sozlamalar va Loglar
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,22 +49,24 @@ def get_settings_kb():
         [InlineKeyboardButton(text="🗑 Katalog tozalash", callback_data="clear_cat")]
     ])
 
-# --- FUNKSIYALAR ---
+# --- ASOSIY FUNKSIYALAR ---
 async def process_and_send(file_path, original_name):
     try:
         new_name = smart_rename(original_name)
         new_path = os.path.join(os.path.dirname(file_path), new_name)
         os.rename(file_path, new_path)
         
+        # Fayl turiga qarab qayta ishlash
         if new_name.lower().endswith(('.xlsx', '.xls')): edit_excel(new_path)
         elif new_name.lower().endswith('.pdf'): add_pdf_watermark(new_path)
         elif new_name.lower().endswith('.docx'): edit_docx(new_path)
 
+        # Kategoriyani aniqlash
         cat = "BSB_CHSB" if "bsb" in new_name.lower() or "chsb" in new_name.lower() else \
               ("Yuqori" if any(x in new_name.lower() for x in ["5-","6-","7-","8-","9-","10-","11-"]) else "Boshlang'ich")
 
-        caption_tpl = await db.get_setting('post_caption')
-        footer = await db.get_setting('footer_text')
+        caption_tpl = await db.get_setting('post_caption') or "{name} | @{channel}"
+        footer = await db.get_setting('footer_text') or ""
         
         sent = await bot.send_document(
             CH_ID, 
@@ -76,33 +78,28 @@ async def process_and_send(file_path, original_name):
         if os.path.exists(new_path): os.remove(new_path)
         logger.info(f"Fayl yuborildi: {new_name}")
     except Exception as e:
-        logger.error(f"Xatolik: {e}")
+        logger.error(f"Fayl yuborishda xatolik: {e}")
 
 # --- HANDLERLAR ---
-
 @dp.message(F.text == "/start")
 async def cmd_start(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("🛡 <b>Admin Panel yuklandi.</b>", reply_markup=get_main_kb())
 
-# --- 📅 REJALARNI KO'RISH TUGMASI ---
 @dp.message(F.text == "📅 Rejalarni ko'rish")
 async def view_plans(m: Message):
     if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
     plans = scheduler.get_jobs()
     if not plans:
-        await m.answer("📭 Hozircha rejalashtirilgan fayllar yo'q.")
-        return
+        return await m.answer("📭 Hozircha rejalashtirilgan fayllar yo'q.")
     
     text = "⏳ <b>Kutilayotgan rejalaringiz:</b>\n\n"
     for job in plans:
         time_str = job.next_run_time.strftime('%d.%m.%Y %H:%M')
-        # job.args orqali fayl nomini olamiz (agar args[1] da f_name bo'lsa)
         f_name = job.args[1] if len(job.args) > 1 else "Noma'lum fayl"
         text += f"📄 Fayl: {f_name}\n⏰ Vaqt: {time_str}\n\n"
     await m.answer(text)
 
-# --- 📈 STATISTIKA TUGMASI ---
 @dp.message(F.text == "📈 Batafsil statistika")
 async def show_stats(m: Message):
     if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
@@ -115,27 +112,21 @@ async def show_stats(m: Message):
     )
     await m.answer(text)
 
-# --- ⚙️ SOZLAMALAR TUGMASI ---
 @dp.message(F.text == "⚙️ Sozlamalar")
 async def settings_menu(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
-        await m.answer("⚙️ <b>Sozlamalar bo'limi:</b>\n\nBu yerdan post shabloni va footer matnini o'zgartirishingiz mumkin.", 
-                       reply_markup=get_settings_kb())
+        await m.answer("⚙️ <b>Sozlamalar bo'limi:</b>", reply_markup=get_settings_kb())
 
-# --- 💎 ADMINLARNI BOSHQARISH TUGMASI ---
 @dp.message(F.text == "💎 Adminlarni boshqarish")
 async def manage_admins(m: Message):
     if m.from_user.id != OWNER_ID:
-        await m.answer("❌ Bu bo'lim faqat asosiy ega (Owner) uchun!")
-        return
-    
-    admins = await db.get_admins()
-    if not admins:
-        await m.answer("👥 Hozircha qo'shimcha adminlar yo'q.\n\nAdmin qo'shish uchun: <code>/add_admin ID</code>")
+        return await m.answer("❌ Bu bo'lim faqat Owner uchun!")
+    admins_list = await db.get_admins()
+    if not admins_list:
+        await m.answer("👥 Adminlar yo'q.\nAdmin qo'shish: <code>/add_admin ID</code>")
     else:
         text = "👥 <b>Adminlar ro'yxati:</b>\n\n"
-        for adm in admins:
-            text += f"👤 ID: <code>{adm[0]}</code>\n"
+        for adm in admins_list: text += f"👤 ID: <code>{adm[0]}</code>\n"
         await m.answer(text)
 
 @dp.message(F.document)
@@ -145,7 +136,7 @@ async def handle_doc(m: Message, state: FSMContext):
     path = f"downloads/{m.document.file_name}"
     await bot.download(m.document, destination=path)
     await state.update_data(f_path=path, f_name=m.document.file_name)
-    await m.answer("📅 Fayl qachon yuborilsin? (Format: <code>DD.MM.YYYY HH:MM</code>)\nHozir yuborish uchun <b>0</b> yuboring.")
+    await m.answer("📅 Yuborish vaqti (DD.MM.YYYY HH:MM) yoki hozir uchun <b>0</b> yuboring:")
     await state.set_state(AdminStates.waiting_for_time)
 
 @dp.message(AdminStates.waiting_for_time)
@@ -170,7 +161,7 @@ async def schedule_step(m: Message, state: FSMContext):
             scheduler.add_job(process_and_send, 'date', run_date=run_time, args=[data['f_path'], data['f_name']])
             await m.answer(f"⏳ Fayl rejalashtirildi: {m.text}")
         except:
-            await m.answer("❌ Format xato. Namuna: 06.01.2025 23:00")
+            await m.answer("❌ Xato format. Namuna: 06.01.2025 23:00")
             return
     await state.clear()
 
@@ -182,16 +173,16 @@ async def show_cats(m: Message):
         [InlineKeyboardButton(text="Yuqori sinflar", callback_data="cat_Yuqori")],
         [InlineKeyboardButton(text="BSB/CHSB", callback_data="cat_BSB_CHSB")]
     ])
-    await m.answer("Mundarija yaratish uchun kategoriyani tanlang:", reply_markup=kb)
+    await m.answer("Kategoriyani tanlang:", reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("cat_"))
 async def create_catalog(c: CallbackQuery):
     cat = c.data.split("_", 1)[1]
     items = await db.get_catalog(cat)
-    if not items: return await c.answer("Hozircha bu bo'limda fayl yo'q", show_alert=True)
+    if not items: return await c.answer("Fayllar topilmadi", show_alert=True)
     
-    q = await db.get_setting('quarter')
-    header = await db.get_setting('catalog_header')
+    q = await db.get_setting('quarter') or "3"
+    header = await db.get_setting('catalog_header') or "{quarter}-CHORAK REJALARI"
     text = f"<b>{header.format(quarter=q)}</b>\n\n"
     for i, (name, link) in enumerate(items, 1):
         text += f"{i}. <a href='{link}'>{name}</a>\n"
@@ -200,8 +191,7 @@ async def create_catalog(c: CallbackQuery):
     await c.answer("Mundarija kanalga yuborildi!")
 
 # --- WEB SERVER (RENDER KEEP-ALIVE) ---
-async def handle_root(request):
-    return web.Response(text="Bot is Live 🚀")
+async def handle_root(request): return web.Response(text="Bot is Live 🚀")
 
 async def main():
     await db.create_tables()
@@ -214,9 +204,10 @@ async def main():
     port = int(os.environ.get("PORT", 10000))
     await web.TCPSite(runner, '0.0.0.0', port).start()
     
+    # MUHIM: CONFLICT OLDINI OLISH
     await bot.delete_webhook(drop_pending_updates=True)
     
-    logger.info("Bot ishga tushmoqda...")
+    logger.info("Bot polling boshlamoqda...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
