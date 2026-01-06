@@ -13,3 +13,7 @@ Ushbu bot o'qituvchilar uchun dars rejalarini avtomatlashtirilgan tarzda brendla
 1. `.env` fayliga `BOT_TOKEN`, `ADMIN_ID`, `CHANNEL_ID` kiriting.
 2. Render panelida `RENDER_EXTERNAL_URL`ni sozlang.
 3. `Dockerfile` orqali Web Service sifatida deploy qiling.
+# Professional Document Bot
+- Fayllarni rejalashtirilgan vaqtda yuborish.
+- Excel va PDF fayllarni avtomatik brendlash.
+- Adminlar va choraklarni boshqarish tizimi.
