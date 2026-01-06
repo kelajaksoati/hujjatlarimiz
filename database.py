@@ -6,15 +6,19 @@ class Database:
 
     async def create_tables(self):
         async with aiosqlite.connect(self.db_path) as db:
+            # Katalog jadvali
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS catalog (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, 
                     name TEXT, category TEXT, link TEXT, msg_id INTEGER
                 )
             """)
+            # Sozlamalar jadvali
             await db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+            # Adminlar jadvali
             await db.execute("CREATE TABLE IF NOT EXISTS admins (user_id INTEGER PRIMARY KEY)")
             
+            # Standart sozlamalar
             defaults = [
                 ('quarter', '1'),
                 ('post_caption', "📚 <b>{name}</b>\n\n✅ Kanal: @{channel}"),
@@ -38,7 +42,7 @@ class Database:
                 return row[0] if row else ""
 
     async def is_admin(self, user_id, owner_id):
-        if user_id == owner_id: return True
+        if int(user_id) == int(owner_id): return True
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("SELECT 1 FROM admins WHERE user_id = ?", (user_id,)) as cursor:
                 res = await cursor.fetchone()
@@ -62,7 +66,8 @@ class Database:
 
     async def add_to_catalog(self, name, category, link, msg_id):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", (name, category, link, msg_id))
+            await db.execute("INSERT INTO catalog (name, category, link, msg_id) VALUES (?, ?, ?, ?)", 
+                             (name, category, link, msg_id))
             await db.commit()
 
     async def get_catalog(self, category):
