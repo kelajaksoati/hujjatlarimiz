@@ -5,7 +5,6 @@ class Database:
         self.db_path = db_path
 
     async def create_tables(self):
-        """Ma'lumotlar bazasi jadvallarini yaratish."""
         async with aiosqlite.connect(self.db_path) as db:
             # Fayllar mundarijasi uchun jadval
             await db.execute("""
@@ -16,21 +15,20 @@ class Database:
                     link TEXT
                 )
             """)
-            # Sozlamalar (chorak va h.k.) uchun jadval
+            # Sozlamalar (chorak nomi) uchun jadval
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT
                 )
             """)
-            # Standart chorakni o'rnatish
-            await db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('quarter', '2-CHORAK')")
+            # Standart chorak nomini kiritish
+            await db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('quarter', '3-CHORAK')")
             await db.commit()
 
     async def add_to_catalog(self, name, category, link):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT INTO catalog (name, category, link) VALUES (?, ?, ?)", 
-                             (name, category, link))
+            await db.execute("INSERT INTO catalog (name, category, link) VALUES (?, ?, ?)", (name, category, link))
             await db.commit()
 
     async def get_catalog(self, category):
