@@ -63,6 +63,13 @@ class Database:
             await db.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
             await db.commit()
 
+    # --- SIZ QO'SHGAN YANGI FUNKSIYA ---
+    async def get_admins(self):
+        """Barcha adminlar ID raqamlarini olish"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT user_id FROM admins") as cursor:
+                return await cursor.fetchall()
+
     async def get_stats(self):
         """Katalogdagi fayllar sonini olish"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -86,7 +93,7 @@ class Database:
                 return await cursor.fetchall()
 
     async def clear_catalog(self):
-        """Katalogni tozalash (Sozlamalardagi Tozalash tugmasi uchun)"""
+        """Katalogni tozalash"""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM catalog")
             await db.commit()
