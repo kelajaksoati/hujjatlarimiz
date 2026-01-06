@@ -56,12 +56,10 @@ async def process_and_send(file_path, original_name):
         new_path = os.path.join(os.path.dirname(file_path), new_name)
         os.rename(file_path, new_path)
         
-        # Faylni tahrirlash
         if new_name.lower().endswith(('.xlsx', '.xls')): edit_excel(new_path)
         elif new_name.lower().endswith('.pdf'): add_pdf_watermark(new_path)
         elif new_name.lower().endswith('.docx'): edit_docx(new_path)
 
-        # Kategoriya aniqlash
         cat = "BSB_CHSB" if "bsb" in new_name.lower() or "chsb" in new_name.lower() else \
               ("Yuqori" if any(x in new_name.lower() for x in ["5-","6-","7-","8-","9-","10-","11-"]) else "Boshlang'ich")
 
@@ -165,9 +163,13 @@ async def handle_root(request):
     return web.Response(text="Bot is Live 🚀")
 
 async def main():
+    # 1. Bazani tayyorlash
     await db.create_tables()
+    
+    # 2. Rejalashtiruvchini yoqish
     scheduler.start()
     
+    # 3. Web serverni yoqish (Render Health Check uchun)
     app = web.Application()
     app.router.add_get('/', handle_root)
     runner = web.AppRunner(app)
@@ -175,9 +177,16 @@ async def main():
     port = int(os.environ.get("PORT", 10000))
     await web.TCPSite(runner, '0.0.0.0', port).start()
     
-    # Render conflict oldini olish
+    # 4. Konfliktni oldini olish (Eski ulanishlarni uzish)
+    # Bu qator botni har safar yangidan yoqqanda conflict xatosini yo'qotadi
     await bot.delete_webhook(drop_pending_updates=True)
+    
+    # 5. Pollingni boshlash
+    logger.info("Bot ishga tushmoqda...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot to'xtatildi")
