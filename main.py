@@ -14,7 +14,7 @@ from processor import smart_rename, edit_excel, add_pdf_watermark, edit_docx
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 db = Database()
-bot = Bot(token=os.getenv("BOT_TOKEN"), default=types.DefaultBotProperties(parse_mode="HTML"))
+bot = Bot(token=os.getenv("BOT_TOKEN"), default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 
