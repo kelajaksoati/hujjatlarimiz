@@ -79,10 +79,60 @@ async def process_and_send(file_path, original_name):
         logger.error(f"Xatolik: {e}")
 
 # --- HANDLERLAR ---
+
 @dp.message(F.text == "/start")
 async def cmd_start(m: Message):
     if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
         await m.answer("🛡 <b>Admin Panel yuklandi.</b>", reply_markup=get_main_kb())
+
+@dp.message(F.text == "📅 Rejalarni ko'rish")
+async def view_plans(m: Message):
+    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): return
+    plans = scheduler.get_jobs()
+    if not plans:
+        await m.answer("📭 Hozircha rejalashtirilgan fayllar yo'q.")
+        return
+    
+    text = "⏳ <b>Kutilayotgan rejalaringiz:</b>\n\n"
+    for job in plans:
+        time_str = job.next_run_time.strftime('%d.%m.%Y %H:%M')
+        text += f"📄 Job ID: <code>{job.id}</code>\n⏰ Vaqti: {time_str}\n\n"
+    await m.answer(text)
+
+@dp.message(F.text == "📈 Batafsil statistika")
+async def show_stats(m: Message):
+    if not (m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID)): 
+        return
+        
+    count = await db.get_stats() 
+    text = (
+        "📊 <b>Bot Statistikasi</b>\n\n"
+        f"✅ Jami yuklangan fayllar: <b>{count} ta</b>\n"
+        f"📡 Kanal: @{CH_NAME}\n"
+        f"📅 Bugungi sana: {datetime.now().strftime('%d.%m.%Y')}"
+    )
+    await m.answer(text)
+
+@dp.message(F.text == "⚙️ Sozlamalar")
+async def settings_menu(m: Message):
+    if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
+        await m.answer("⚙️ <b>Bot sozlamalari:</b>\n\nBu yerdan post shabloni va footer matnini o'zgartirishingiz mumkin.", 
+                       reply_markup=get_settings_kb())
+
+@dp.message(F.text == "💎 Adminlarni boshqarish")
+async def manage_admins(m: Message):
+    if m.from_user.id != OWNER_ID:
+        await m.answer("❌ Bu bo'lim faqat asosiy ega (Owner) uchun!")
+        return
+    
+    admins = await db.get_admins()
+    if not admins:
+        await m.answer("👥 Hozircha qo'shimcha adminlar yo'q.\n\nAdmin qo'shish uchun: <code>/add_admin ID</code>")
+    else:
+        text = "👥 <b>Adminlar ro'yxati:</b>\n\n"
+        for adm in admins:
+            text += f"👤 ID: <code>{adm[0]}</code>\n"
+        await m.answer(text)
 
 @dp.message(F.document)
 async def handle_doc(m: Message, state: FSMContext):
@@ -147,29 +197,14 @@ async def create_catalog(c: CallbackQuery):
     await bot.send_message(CH_ID, text, disable_web_page_preview=True)
     await c.answer("Mundarija kanalga yuborildi!")
 
-@dp.message(F.text == "⚙️ Sozlamalar")
-async def settings_menu(m: Message):
-    if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
-        await m.answer("⚙️ <b>Sozlamalar paneli:</b>", reply_markup=get_settings_kb())
-
-@dp.message(F.text == "📈 Batafsil statistika")
-async def show_stats(m: Message):
-    if m.from_user.id == OWNER_ID or await db.is_admin(m.from_user.id, OWNER_ID):
-        count = await db.get_stats()
-        await m.answer(f"📊 <b>Statistika:</b>\n\n✅ Bazadagi fayllar: {count} ta\n📡 Kanal: @{CH_NAME}")
-
 # --- WEB SERVER (RENDER KEEP-ALIVE) ---
 async def handle_root(request):
     return web.Response(text="Bot is Live 🚀")
 
 async def main():
-    # 1. Bazani tayyorlash
     await db.create_tables()
-    
-    # 2. Rejalashtiruvchini yoqish
     scheduler.start()
     
-    # 3. Web serverni yoqish (Render Health Check uchun)
     app = web.Application()
     app.router.add_get('/', handle_root)
     runner = web.AppRunner(app)
@@ -177,11 +212,8 @@ async def main():
     port = int(os.environ.get("PORT", 10000))
     await web.TCPSite(runner, '0.0.0.0', port).start()
     
-    # 4. Konfliktni oldini olish (Eski ulanishlarni uzish)
-    # Bu qator botni har safar yangidan yoqqanda conflict xatosini yo'qotadi
     await bot.delete_webhook(drop_pending_updates=True)
     
-    # 5. Pollingni boshlash
     logger.info("Bot ishga tushmoqda...")
     await dp.start_polling(bot)
 
